@@ -1,3 +1,5 @@
+#!/usr/bin/env luajit
+
 --[[ Build the entity list
 --
 -- This script finds all .xml files in data/entities/animals that contain an

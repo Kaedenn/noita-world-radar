@@ -350,23 +350,25 @@ function Panel:build_menu(imgui)
             conf_set(CONF.ENABLE, false)
         end
 
-        imgui.Separator()
+        if #self.PANELS > 1 then
+            imgui.Separator()
 
-        for pid, pobj in pairs(self.PANELS) do
-            local mstr = pobj.name
-            if pid == self.id_current then
-                mstr = mstr .. " [*]"
+            for pid, pobj in pairs(self.PANELS) do
+                local mstr = pobj.name
+                if pid == self.id_current then
+                    mstr = mstr .. " [*]"
+                end
+                if imgui.MenuItem(mstr) then
+                    self:set(pid)
+                end
             end
-            if imgui.MenuItem(mstr) then
-                self:set(pid)
-            end
-        end
 
-        imgui.Separator()
+            imgui.Separator()
 
-        if current ~= nil then
-            if imgui.MenuItem("Return") then
-                self:reset()
+            if current ~= nil then
+                if imgui.MenuItem("Return") then
+                    self:reset()
+                end
             end
         end
 

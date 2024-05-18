@@ -1,8 +1,12 @@
--- Kae test mod
+--[[ Spell Finder
+--
+-- This mod serves the "Info" panel of the kae_test mod with a few
+-- modifications.
+--
+--]]
 
 dofile_once("data/scripts/lib/mod_settings.lua")
 
-dofile_once("mods/spell_finder/files/functions.lua")
 dofile_once("mods/spell_finder/config.lua")
 
 KPanelLib = dofile("mods/spell_finder/files/panel.lua")
@@ -18,13 +22,6 @@ function _build_menu_bar_gui()
         end
         local pres, pval = pcall(do_build_menu)
         if not pres then GamePrint(("do_build('%s')"):format(pval)) end
-
-        if imgui.BeginMenu("Actions") then
-            if imgui.MenuItem("Close") then
-                conf_set(CONF.ENABLE, false)
-            end
-            imgui.EndMenu()
-        end
 
         imgui.EndMenuBar()
     end
@@ -71,7 +68,7 @@ function OnWorldPostUpdate()
             KPanel:set("info")
         end
 
-        if imgui.Begin("Kae", nil, bit.bor(
+        if imgui.Begin("Spell Finder###spell_finder", nil, bit.bor(
             --imgui.WindowFlags.NoFocusOnAppearing,
             --imgui.WindowFlags.NoNavInputs,
             --imgui.WindowFlags.HorizontalScrollbar,

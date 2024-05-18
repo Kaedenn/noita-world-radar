@@ -3,14 +3,21 @@
 The "Info" Panel: Display interesting information
 
 TODO: Only display the primary biome of a biome group
-TODO: Draw health bars (only) when enabled
 TODO: Make rare_materials table configurable
 TODO: Make rare_entities table configurable
 --]]
 
 nxml = dofile_once("mods/spell_finder/files/lib/nxml.lua")
 smallfolk = dofile_once("mods/spell_finder/files/lib/smallfolk.lua")
-EditList = dofile_once("mods/spell_finder/files/lib/editable_list.lua")
+
+dofile_once("mods/spell_finder/files/utility/biome.lua")
+-- luacheck: globals biome_is_default biome_modifier_get
+dofile_once("mods/spell_finder/files/utility/entity.lua")
+-- luacheck: globals is_child_of entity_is_item entity_is_enemy item_get_name enemy_get_name get_name get_health get_with_tags distance_from
+dofile_once("mods/spell_finder/files/utility/material.lua")
+-- luacheck: globals container_get_contents
+dofile_once("mods/spell_finder/files/utility/spell.lua")
+-- luacheck: globals card_get_spell wand_get_spells
 
 InfoPanel = {
     id = "info",
@@ -49,247 +56,16 @@ InfoPanel = {
         {"Biomes", "biome_list", true},
         {"Items", "item_list", true},
         {"Enemies", "enemy_list", true},
-        {"On-screen", "onscreen", true},
         {"Spells", "find_spells", true},
-        {"Health bars", "show_health", false},
+        {"On-screen", "onscreen", true},
     },
 
     -- For debugging, provide access to the local functions
     _private_funcs = {},
 }
 
---[[ True if the given biome normally has the given modifier ]]
-local function _biome_is_default(biome_name, modifier)
-    if modifier == nil or modifier == "" then return true end
-    local default_map = {
-        ["alchemist_secret"] = "$biomemodifierdesc_fog_of_war_clear_at_player",
-        ["desert"] = "$biomemodifierdesc_hot",
-        ["fungicave"] = "$biomemodifierdesc_moist",
-        ["lavalake"] = "$biomemodifierdesc_hot",
-        ["mountain_floating_island"] = "$biomemodifierdesc_freezing",
-        ["mountain_top"] = "$biomemodifierdesc_freezing",
-        ["pyramid_entrance"] = "$biomemodifierdesc_hot",
-        ["pyramid_left"] = "$biomemodifierdesc_hot",
-        ["pyramid_right"] = "$biomemodifierdesc_hot",
-        ["pyramid_top"] = "$biomemodifierdesc_hot",
-        ["rainforest"] = "$biomemodifierdesc_fungal",
-        ["rainforest_open"] = "$biomemodifierdesc_fungal",
-        ["wandcave"] = "$biomemodifierdesc_fog_of_war_clear_at_player",
-        ["watercave"] = "$biomemodifierdesc_moist",
-        ["winter"] = "$biomemodifierdesc_freezing",
-        ["winter_caves"] = "$biomemodifierdesc_freezing",
-        ["wizardcave"] = "$biomemodifierdesc_fog_of_war_clear_at_player",
-    }
-    if default_map[biome_name] == modifier then
-        return true
-    end
-    return false
-end
-InfoPanel._private_funcs._biome_is_default = _biome_is_default
-
---[[ Get a biome modifier by name ]]
-local function _biome_modifier_get(mod_name)
-    -- luacheck: globals biome_modifiers
-    dofile("data/scripts/biome_modifiers.lua")
-    for _, entry in ipairs(biome_modifiers) do
-        if entry.ui_description == mod_name then
-            return entry
-        end
-    end
-    return nil
-end
-InfoPanel._private_funcs._biome_modifier_get = _biome_modifier_get
-
---[[ True if entity is a child of root ]]
-local function _is_child_of(entity, root)
-    if root == nil then root = get_players()[1] end
-    local seen = {} -- To protect against cycles
-    local curr = EntityGetParent(entity)
-    if curr == root then return true end
-    while curr ~= 0 and not seen[curr] do
-        if curr == root then return true end
-        seen[curr] = EntityGetParent(curr)
-        if curr == seen[curr] then return false end
-        curr = seen[curr]
-    end
-end
-InfoPanel._private_funcs._is_child_of = _is_child_of
-
---[[ True if the entity is an item ]]
-local function _entity_is_item(entity)
-    return EntityHasTag(entity, "item_pickup")
-end
-InfoPanel._private_funcs._entity_is_item = _entity_is_item
-
---[[ True if the entity is an enemy ]]
-local function _entity_is_enemy(entity)
-    return EntityHasTag(entity, "enemy")
-end
-InfoPanel._private_funcs._entity_is_enemy = _entity_is_enemy
-
---[[ Get the display string for an item entity ]]
-local function _item_get_name(entity)
-    local name = EntityGetName(entity)
-    local comps = EntityGetComponentIncludingDisabled(entity, "ItemComponent") or {}
-    for _, comp in ipairs(comps) do
-        local uiname = ComponentGetValue2(comp, "item_name")
-        if uiname ~= "" then
-            name = uiname
-            break
-        end
-    end
-
-    local path = EntityGetFilename(entity)
-    if path:match("chest_random_super.xml") then
-        return ("%s [%s]"):format(
-            GameTextGet("$item_chest_treasure_super"),
-            "chest_random_super.xml")
-    end
-    if path:match("physics_greed_die.xml") then
-        return ("%s [%s]"):format(
-            GameTextGet("$item_greed_die"),
-            "physics_greed_die.xml")
-    end
-
-    if name ~= "" and name:match("^[$][%a]+_[%a%d_]+$") then
-        locname = GameTextGet(name)
-        name = name:gsub("^[$][%a]+_", "") -- strip "$item_" prefix
-        if locname:lower() ~= name:lower() then
-            return ("%s [%s]"):format(locname, name)
-        end
-        return locname
-    end
-
-    if name ~= "" then return name end
-    return nil
-end
-InfoPanel._private_funcs._item_get_name = _item_get_name
-
---[[ Get the display string for an enemy entity ]]
-local function _enemy_get_name(entity)
-    local name = EntityGetName(entity)
-    local locname = name
-    if name ~= "" and name:match("^[$][%a]+_[%a%d_]+$") then
-        locname = GameTextGet(name)
-        if locname == "" then locname = name end
-        name = name:gsub("^[$][%a]+_", "") -- strip "$animal_" prefix
-    end
-
-    local path = EntityGetFilename(entity)
-    local label = path:gsub("^[%a_/]+/([%a%d_]+).xml", "%1") -- basename
-    if path:match("data/entities/animals/([%a_]+)/([%a%d_]+).xml") then
-        label = path:gsub("data/entities/animals/([%a_]+)/([%a%d_]+).xml",
-            function(dirname, basename)
-                if dirname == basename then
-                    return dirname
-                end
-                return ("%s (%s)"):format(basename, dirname)
-            end
-        )
-    elseif path:match("data/entities/animals/([%a%d_]+).xml") then
-        label = path:gsub("data/entities/animals/([%a%d_]+).xml", "%1")
-    end
-    if name == "" then
-        locname = label
-        name = label
-    end
-
-    local result = name
-    local locname_u = locname:lower()
-    local label_u = label:lower()
-    local name_u = name:lower()
-    if locname_u ~= name_u and label_u ~= name_u then
-        result = ("%s [%s] [%s]"):format(locname, name, label)
-    elseif locname_u ~= name_u then
-        result = ("%s [%s]"):format(locname, name)
-    elseif label_u ~= name_u then
-        result = ("%s [%s]"):format(name, label)
-    end
-    return result
-end
-InfoPanel._private_funcs._enemy_get_name = _enemy_get_name
-
---[[ Get the display string for the entity ]]
-local function _get_name(entity)
-    if _entity_is_item(entity) then
-        return _item_get_name(entity)
-    end
-
-    if _entity_is_enemy(entity) then
-        return _enemy_get_name(entity)
-    end
-
-    -- Default behavior for "other" entity types
-    local name = EntityGetName(entity)
-    local path = EntityGetFilename(entity)
-    if path:match("data/entities/items/pickup/([%a_]+).xml") then
-        path = path:gsub("data/entities/items/pickup/([%a_]+).xml", "%1")
-    elseif path:match("data/entities/animals/([%a_]+)/([%a_]+).xml") then
-        path = path:gsub("data/entities/animals/([%a_]+)/([%a_]+).xml", "%2 (%1)")
-    elseif path:match("data/entities/animals/([%a_]+).xml") then
-        path = path:gsub("data/entities/animals/([%a_]+).xml", "%1")
-    end
-    if name ~= "" and name:lower() ~= path:lower() then
-        return ("%s [%s]"):format(name, path)
-    end
-    return path
-end
-InfoPanel._private_funcs._get_name = _get_name
-
---[[ Get both the current and max health of the entity ]]
-local function _get_health(entity)
-    local comps = EntityGetComponentIncludingDisabled(entity, "DamageModelComponent") or {}
-    if #comps == 0 then return nil end
-    local mult = MagicNumbersGetValue("GUI_HP_MULTIPLIER")
-    local health = ComponentGetValue2(comps[1], "hp") * mult
-    local maxhealth = ComponentGetValue2(comps[1], "max_hp") * mult
-    return {health, maxhealth}
-end
-InfoPanel._private_funcs._get_health = _get_health
-
---[[ Get all entities having one of the given tags
---
--- Returns a table of {entity_id, entity_name} pairs.
---
--- Filters:
---  no_player       omit entities descending from the player entitiy
---]]
-local function _get_with_tags(tags, filters)
-    if not filters then filters = {} end
-    local entities = {}
-    for _, tag in ipairs(tags) do
-        for _, entity in ipairs(EntityGetWithTag(tag)) do
-            local add_me = true
-            if filters.no_player and _is_child_of(entity, nil) then
-                add_me = false
-            end
-            if add_me then
-                entities[entity] = _get_name(entity)
-            end
-        end
-    end
-    local results = {}
-    for entid, name in pairs(entities) do
-        table.insert(results, {entid, name})
-    end
-    return results
-end
-InfoPanel._private_funcs._get_with_tags = _get_with_tags
-
---[[ Return the distance (in pixels) between two entities
--- Reference defaults to the player if nil ]]
-local function _distance_from(entity, reference)
-    if reference == nil then reference = get_players()[1] end
-    local rx, ry = EntityGetTransform(reference)
-    local ex, ey = EntityGetTransform(entity)
-    if rx == nil or ry == nil then return 0 end
-    if ex == nil or ey == nil then return 0 end
-    return math.sqrt(math.pow(rx-ex, 2) + math.pow(ry-ey, 2))
-end
-InfoPanel._private_funcs._distance_from = _distance_from
-
 --[[ Collect {id, name} pairs into {name, {id...}} sets ]]
-local function _aggregate(entries)
+local function aggregate(entries)
     local byname = {}
     for _, entry in ipairs(entries) do
         local entity = entry[1] or entry.entity
@@ -311,51 +87,6 @@ local function _aggregate(entries)
     end)
     return results
 end
-InfoPanel._private_funcs._aggregate = _aggregate
-
---[[ Get the contents of a given container (flask/pouch) ]]
-function _container_get_contents(entity)
-    local results = {}
-    local comps = EntityGetComponentIncludingDisabled(entity, "MaterialInventoryComponent")
-    if not comps or #comps == 0 then return {} end
-    local comp = comps[1]
-    if not comp or comp == 0 then return {} end
-    for idx, count in ipairs(ComponentGetValue2(comp, "count_per_material_type")) do
-        if count ~= 0 then
-            local matid = idx - 1
-            local matname = CellFactory_GetName(matid)
-            --local uiname = CellFactory_GetUIName(matid)
-            --local matuiname = GameTextGetTranslatedOrNot(uiname)
-            results[matname] = count
-        end
-    end
-    return results
-end
-InfoPanel._private_funcs._container_get_contents = _container_get_contents
-
---[[ Get the spell for the given card ]]
-local function _card_get_spell(card)
-    local action = EntityGetComponentIncludingDisabled(card, "ItemActionComponent")
-    if #action == 1 then
-        return ComponentGetValue2(action[1], "action_id")
-    end
-    return nil
-end
-InfoPanel._private_funcs._card_get_spell = _card_get_spell
-
---[[ Get all of the spells on the given wand ]]
-local function _wand_get_spells(entity)
-    local cards = EntityGetAllChildren(entity) or {}
-    local spells = {}
-    for _, card in ipairs(cards) do
-        local spell = _card_get_spell(card)
-        if spell ~= nil then
-            table.insert(spells, spell)
-        end
-    end
-    return spells
-end
-InfoPanel._private_funcs._wand_get_spells = _wand_get_spells
 
 --[[ Get biome information (name, path, modifier) for each biome ]]
 function InfoPanel:_get_biome_data()
@@ -365,8 +96,8 @@ function InfoPanel:_get_biome_data()
         local biome_path = bdef.attr.biome_filename
         local biome_name = biome_path:match("^data/biome/(.*).xml$")
         local modifier = BiomeGetValue(biome_path, "mModifierUIDescription")
-        local mod_data = _biome_modifier_get(modifier) or {}
-        if not _biome_is_default(biome_name, modifier) then
+        local mod_data = biome_modifier_get(modifier) or {}
+        if not biome_is_default(biome_name, modifier) then
             biomes[biome_name] = {
                 name = biome_name, -- TODO: reliably determine localized name
                 path = biome_path,
@@ -408,19 +139,18 @@ end
 
 --[[ Get all of the known materials ]]
 function InfoPanel:_get_materials()
-    if not self.env.material_cache then
-        self.env.material_cache = {
-            liquids = CellFactory_GetAllLiquids(),
-            sands = CellFactory_GetAllSands(),
-            gases = CellFactory_GetAllGases(),
-            fires = CellFactory_GetAllFires(),
-            solids = CellFactory_GetAllSolids(),
-        }
+    if not self.env.material_cache or #self.env.material_cache == 0 then
+        self.env.material_cache = {}
+        self.env.material_cache.liquids = CellFactory_GetAllLiquids()
+        self.env.material_cache.sands = CellFactory_GetAllSands()
+        self.env.material_cache.gases = CellFactory_GetAllGases()
+        self.env.material_cache.fires = CellFactory_GetAllFires()
+        self.env.material_cache.solids = CellFactory_GetAllSolids()
     end
     return self.env.material_cache
 end
 
---[[ Get all of the known entities ]]
+--[[ Get all of the known entities (TODO) ]]
 function InfoPanel:_get_entities()
     -- TODO
 end
@@ -429,11 +159,10 @@ end
 function InfoPanel:_filter_entries(entries)
     local results = {}
     for _, entry in ipairs(entries) do
-        local entity = entry[1]
-        local name = entry[2]
+        local entity, name = unpack(entry)
         if name:match("^mods/") == nil then
-            if not _is_child_of(entity, nil) then
-                local distance = _distance_from(entity, nil)
+            if not is_child_of(entity, nil) then
+                local distance = distance_from(entity, nil)
                 if distance <= self.config.range then
                     table.insert(results, entry)
                 end
@@ -445,16 +174,15 @@ end
 
 --[[ Get all non-held items within conf.range ]]
 function InfoPanel:_get_items()
-    return self:_filter_entries(_get_with_tags({"item_pickup"}))
+    return self:_filter_entries(get_with_tags({"item_pickup"}))
 end
 
 --[[ Locate any flasks/pouches containing rare materials ]]
-function InfoPanel:_get_rare_containers()
+function InfoPanel:_find_containers()
     local containers = {}
-    for _, item in ipairs(self:_filter_entries(_get_with_tags({"item_pickup"}))) do
-        local entity = item[1]
-        local name = item[2]
-        local contents = _container_get_contents(entity)
+    for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
+        local entity, name = unpack(item)
+        local contents = container_get_contents(entity)
         local rare_mats = {}
         for _, material in ipairs(self.config.rare_materials) do
             if contents[material] and contents[material] > 0 then
@@ -474,11 +202,10 @@ function InfoPanel:_get_rare_containers()
 end
 
 --[[ Locate any rare items ]]
-function InfoPanel:_get_rare_items()
+function InfoPanel:_find_items()
     local items = {}
-    for _, item in ipairs(self:_filter_entries(_get_with_tags({"item_pickup"}))) do
-        local entity = item[1]
-        local name = item[2]
+    for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
+        local entity, name = unpack(item)
         if name:match(GameTextGet("$item_chest_treasure_super")) then
             table.insert(items, {entity=entity, name=name})
         elseif name:match(GameTextGet("$item_greed_die")) then
@@ -490,19 +217,18 @@ end
 
 --[[ Count the nearby enemies ]]
 function InfoPanel:_get_enemies()
-    return self:_filter_entries(_get_with_tags({"enemy"}))
+    return self:_filter_entries(get_with_tags({"enemy"}))
 end
 
 --[[ Locate any rare enemies nearby ]]
-function InfoPanel:_get_rare_enemies()
+function InfoPanel:_find_enemies()
     local enemies = {}
     local rare_ents = {}
     for _, entname in ipairs(self.config.rare_entities) do
         rare_ents[entname] = 1
     end
     for _, enemy in ipairs(self:_get_enemies()) do
-        local entity = enemy[1]
-        local name = enemy[2]
+        local entity, name = unpack(enemy)
         local entname = EntityGetName(entity)
         if not entname or entname == "" then entname = name end
         if rare_ents[entname] then
@@ -519,9 +245,9 @@ function InfoPanel:_find_spells()
         spell_table[entry.id] = entry
     end
     self.env.wand_matches = {}
-    for _, entry in ipairs(_get_with_tags({"wand"}, {no_player=true})) do
+    for _, entry in ipairs(get_with_tags({"wand"}, {no_player=true})) do
         local entid = entry[1]
-        for _, spell in ipairs(_wand_get_spells(entid)) do
+        for _, spell in ipairs(wand_get_spells(entid)) do
             if spell_table[spell] ~= nil then
                 if not self.env.wand_matches[entid] then
                     self.env.wand_matches[entid] = {}
@@ -532,9 +258,9 @@ function InfoPanel:_find_spells()
     end
 
     self.env.card_matches = {}
-    for _, entry in ipairs(_get_with_tags({"card_action"}, {no_player=true})) do
+    for _, entry in ipairs(get_with_tags({"card_action"}, {no_player=true})) do
         local entid = entry[1]
-        local spell = _card_get_spell(entid)
+        local spell = card_get_spell(entid)
         local parent = EntityGetParent(entid)
         if not self.env.wand_matches[parent] then
             if spell and spell_table[spell] then
@@ -566,17 +292,16 @@ function InfoPanel:_draw_onscreen_gui()
         GuiText(gui, padx, liney, line)
     end
 
-    for _, entry in ipairs(_aggregate(self:_get_rare_enemies())) do
-        local entname = entry[1]
-        local entities = entry[2]
+    for _, entry in ipairs(aggregate(self:_find_enemies())) do
+        local entname, entities = unpack(entry)
         draw_text(("%dx %s"):format(#entities, entname))
     end
 
-    for _, entry in ipairs(self:_get_rare_items()) do
+    for _, entry in ipairs(self:_find_items()) do
         draw_text(entry.name)
     end
 
-    for _, entity in ipairs(self:_get_rare_containers()) do
+    for _, entity in ipairs(self:_find_containers()) do
         local contents = table.concat(entity.rare_contents, ", ")
         draw_text(("%s with %s"):format(entity.name, contents))
     end
@@ -591,7 +316,7 @@ function InfoPanel:_draw_onscreen_gui()
     end
 
     for entid, _ in pairs(self.env.card_matches) do
-        local spell = _card_get_spell(entid)
+        local spell = card_get_spell(entid)
         draw_text(("Spell %s detected nearby!!"):format(spell))
     end
 
@@ -640,8 +365,7 @@ function InfoPanel:init(environ, host)
     self.host = host or {}
 
     for _, bpair in ipairs(self.modes) do
-        local varname = bpair[2]
-        local default = bpair[3]
+        local mname, varname, default = unpack(bpair)
         if self.env[varname] == nil then
             local save_value = self.host:get_var(self.id, varname, "")
             if save_value == "1" or save_value == "0" then
@@ -856,8 +580,7 @@ function InfoPanel:_draw_checkboxes(imgui)
     for idx, bpair in ipairs(self.modes) do
         if idx > 1 then imgui.SameLine() end
         imgui.SetNextItemWidth(100)
-        local name = bpair[1]
-        local varname = bpair[2]
+        local name, varname = unpack(bpair)
         local ret, value = imgui.Checkbox(name, self.env[varname])
         if ret then
             self.env[varname] = value
@@ -1092,9 +815,8 @@ function InfoPanel:draw(imgui)
 
     if self.env.item_list then
         self.host:p(self.host.separator)
-        for _, entry in ipairs(_aggregate(self:_get_items())) do
-            local name = entry[1]
-            local entities = entry[2]
+        for _, entry in ipairs(aggregate(self:_get_items())) do
+            local name, entities = unpack(entry)
             local line = ("%dx %s"):format(#entities, name)
             self.host:p(line)
 
@@ -1106,7 +828,7 @@ function InfoPanel:draw(imgui)
                 if EntityHasTag(entity, "powder_stash") then
                     div = 15
                 end
-                for matname, amount in pairs(_container_get_contents(entity)) do
+                for matname, amount in pairs(container_get_contents(entity)) do
                     table.insert(contents, ("%s %d%%"):format(matname, amount/div))
                 end
                 if #contents > 0 then
@@ -1118,7 +840,7 @@ function InfoPanel:draw(imgui)
             end
         end
 
-        for _, entity in ipairs(self:_get_rare_containers()) do
+        for _, entity in ipairs(self:_find_containers()) do
             self.host:p(("%s with %s detected nearby!!"):format(
                 entity.name, table.concat(entity.rare_contents, ", ")))
             local ex, ey = EntityGetTransform(entity.entity)
@@ -1128,13 +850,12 @@ function InfoPanel:draw(imgui)
 
     if self.env.enemy_list then
         self.host:p(self.host.separator)
-        for _, entry in ipairs(_aggregate(self:_get_enemies())) do
-            local name = entry[1]
-            local entities = entry[2]
+        for _, entry in ipairs(aggregate(self:_get_enemies())) do
+            local name, entities = unpack(entry)
             self.host:p(("%dx %s"):format(#entities, name))
         end
 
-        for _, entity in ipairs(self:_get_rare_enemies()) do
+        for _, entity in ipairs(self:_find_enemies()) do
             self.host:p(("%s detected nearby!!"):format(entity.name))
             local ex, ey = EntityGetTransform(entity.entity)
             self.host:d(("%s %d at {%d,%d}"):format(entity.name, entity.entity, ex, ey))
@@ -1158,23 +879,12 @@ function InfoPanel:draw(imgui)
         end
 
         for entid, _ in pairs(self.env.card_matches) do
-            local spell = _card_get_spell(entid)
+            local spell = card_get_spell(entid)
             self.host:p(("Spell %s detected nearby!!"):format(spell))
             local wx, wy = EntityGetTransform(entid)
             if wx ~= nil and wy ~= nil and wx ~= 0 and wy ~= 0 then
                 local pos_str = ("%d, %d"):format(wx, wy)
                 self.host:d(("Spell %d at %s with %s"):format(entid, pos_str, spell))
-            end
-        end
-    end
-
-    if self.env.show_health then
-        self.host:p(self.host.separator)
-        for _, entity in ipairs(self:_get_enemies()) do
-            local health = _get_health(entity)
-            if health ~= nil then
-                local curr, max = health[1], health[2]
-                -- TODO: draw "curr/max" near entity
             end
         end
     end

@@ -4,7 +4,7 @@ The "Info" Panel: Display interesting information
 
 TODO: Only display the primary biome of a biome group
 TODO: Make rare_materials table configurable
-TODO: Make rare_entities table configurable
+TODO: Make rare_items table configurable
 --]]
 
 nxml = dofile_once("mods/spell_finder/files/lib/nxml.lua")
@@ -34,11 +34,15 @@ InfoPanel = {
         },
         rare_entities = {
             "$animal_worm_big",
-            "$animal_wizard_hearty",
+            "$animal_wizard_hearty", -- heart mage
             "$animal_chest_leggy",
             "$animal_dark_alchemist", -- Pahan muisto; heart mimic
             "$animal_mimic_potion",
             "$animal_playerghost",
+        },
+        rare_items = {
+            "$item_chest_treasure_super",
+            "$item_greed_die",
         },
         gui = {
             pad_left = 10,
@@ -150,9 +154,9 @@ function InfoPanel:_get_materials()
     return self.env.material_cache
 end
 
---[[ Get all of the known entities (TODO) ]]
+--[[ Get all of the known entities ]]
 function InfoPanel:_get_entities()
-    -- TODO
+    return dofile("mods/spell_finder/files/generated/entity_list.lua")
 end
 
 --[[ Filter out entities that are children of the player or too far away ]]
@@ -206,10 +210,10 @@ function InfoPanel:_find_items()
     local items = {}
     for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
         local entity, name = unpack(item)
-        if name:match(GameTextGet("$item_chest_treasure_super")) then
-            table.insert(items, {entity=entity, name=name})
-        elseif name:match(GameTextGet("$item_greed_die")) then
-            table.insert(items, {entity=entity, name=name})
+        for _, iname in ipairs(self.config.rare_items) do
+            if name:match(iname) or name:match(GameTextGet(iname)) then
+                table.insert(items, {entity=entity, name=name})
+            end
         end
     end
     return items
@@ -224,8 +228,8 @@ end
 function InfoPanel:_find_enemies()
     local enemies = {}
     local rare_ents = {}
-    for _, entname in ipairs(self.config.rare_entities) do
-        rare_ents[entname] = 1
+    for _, entry in ipairs(self.env.entity_list) do
+        rare_ents[entry.id] = 1
     end
     for _, enemy in ipairs(self:_get_enemies()) do
         local entity, name = unpack(enemy)
@@ -749,7 +753,35 @@ function InfoPanel:_draw_entity_dropdown(imgui)
 
     if self.env.entity_text ~= "" then
         local enttab = self:_get_entities()
-        -- TODO
+        for _, entry in ipairs(enttab) do
+            local ename = entry.name
+            local epath = entry.path
+            local add_me = false
+            local locname = GameTextGet(entry.name)
+            if entry.name:match(self.env.entity_text) then
+                add_me = true
+            elseif entry.path:match(self.env.entity_text) then
+                add_me = true
+            elseif locname and locname ~= "" then
+                if locname:lower():match(self.env.entity_text:lower()) then
+                    add_me = true
+                end
+            end
+            -- Hide duplicate entities from being added more than once
+            for _, entity in ipairs(self.env.entity_list) do
+                if entity.name == entry.name then
+                    add_me = false
+                end
+            end
+            if add_me then
+                if imgui.SmallButton("Add###add_" .. entry.name) then
+                    if not self.env.entity_add_multi then self.env.entity_text = "" end
+                    table.insert(self.env.entity_list, {id=entry.name, name=locname, path=entry.path})
+                end
+                imgui.SameLine()
+                imgui.Text(("%s (%s)"):format(locname, entry.name))
+            end
+        end
     end
 end
 

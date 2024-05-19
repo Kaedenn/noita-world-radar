@@ -1,6 +1,8 @@
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/lib/mod_settings.lua")
 
+-- luacheck: globals MOD_SETTING_SCOPE_RUNTIME mod_settings_get_version mod_settings_gui_count mod_settings_gui mod_settings_update
+
 -- Available functions:
 -- ModSettingSetNextValue(setting_id, next_value, true/false)
 -- ModSettingSet(setting_id, new_value)

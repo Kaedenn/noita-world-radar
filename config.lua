@@ -1,7 +1,7 @@
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/lib/mod_settings.lua")
 
-MOD_ID = "spell_finder"
+MOD_ID = "world_radar"
 
 CONF = {
     ENABLE = "enable",      -- should the UI be drawn?

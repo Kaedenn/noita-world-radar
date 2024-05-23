@@ -1,22 +1,23 @@
 --[[
-
 The "Info" Panel: Display interesting information
 
 TODO: Only display the primary biome of a biome group
 TODO: Make rare_materials table configurable
 TODO: Make rare_items table configurable
+TODO: Add "include all unknown spells" button
+TODO: Add "show triggers" (eg. temple collapse) via barrier spell effect
 --]]
 
-nxml = dofile_once("mods/spell_finder/files/lib/nxml.lua")
-smallfolk = dofile_once("mods/spell_finder/files/lib/smallfolk.lua")
+nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
+smallfolk = dofile_once("mods/world_radar/files/lib/smallfolk.lua")
 
-dofile_once("mods/spell_finder/files/utility/biome.lua")
+dofile_once("mods/world_radar/files/utility/biome.lua")
 -- luacheck: globals biome_is_default biome_modifier_get
-dofile_once("mods/spell_finder/files/utility/entity.lua")
+dofile_once("mods/world_radar/files/utility/entity.lua")
 -- luacheck: globals is_child_of entity_is_item entity_is_enemy item_get_name enemy_get_name get_name get_health get_with_tags distance_from
-dofile_once("mods/spell_finder/files/utility/material.lua")
+dofile_once("mods/world_radar/files/utility/material.lua")
 -- luacheck: globals container_get_contents
-dofile_once("mods/spell_finder/files/utility/spell.lua")
+dofile_once("mods/world_radar/files/utility/spell.lua")
 -- luacheck: globals card_get_spell wand_get_spells
 
 InfoPanel = {
@@ -29,16 +30,17 @@ InfoPanel = {
             "creepy_liquid",
             "magic_liquid_hp_regeneration", -- Healthium
             "magic_liquid_weakness", -- Diminution
-            "purifying_powder",
+            --"purifying_powder",
             "urine",
         },
         rare_entities = {
             "$animal_worm_big",
-            "$animal_wizard_hearty", -- heart mage
+            --"$animal_wizard_hearty", -- Heart mage; available if desired
             "$animal_chest_leggy",
             "$animal_dark_alchemist", -- Pahan muisto; heart mimic
             "$animal_mimic_potion",
             "$animal_playerghost",
+            "$animal_shaman_wind", -- Valhe; spell refresh mimic
         },
         rare_items = {
             "$item_chest_treasure_super",
@@ -156,7 +158,7 @@ end
 
 --[[ Get all of the known entities ]]
 function InfoPanel:_get_entities()
-    return dofile("mods/spell_finder/files/generated/entity_list.lua")
+    return dofile("mods/world_radar/files/generated/entity_list.lua")
 end
 
 --[[ Filter out entities that are children of the player or too far away ]]
@@ -181,14 +183,14 @@ function InfoPanel:_get_items()
     return self:_filter_entries(get_with_tags({"item_pickup"}))
 end
 
---[[ Locate any flasks/pouches containing rare materials ]]
+--[[ Locate any flasks/pouches containing rare materials (FIXME: use material_list) ]]
 function InfoPanel:_find_containers()
     local containers = {}
     for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
         local entity, name = unpack(item)
         local contents = container_get_contents(entity)
         local rare_mats = {}
-        for _, material in ipairs(self.config.rare_materials) do
+        for _, material in ipairs(self.config.rare_materials) do -- FIXME: material_list
             if contents[material] and contents[material] > 0 then
                 table.insert(rare_mats, material)
             end
@@ -205,12 +207,12 @@ function InfoPanel:_find_containers()
     return containers
 end
 
---[[ Locate any rare items ]]
+--[[ Locate any rare items (FIXME: use item_list) ]]
 function InfoPanel:_find_items()
     local items = {}
     for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
         local entity, name = unpack(item)
-        for _, iname in ipairs(self.config.rare_items) do
+        for _, iname in ipairs(self.config.rare_items) do -- FIXME: item_list
             if name:match(iname) or name:match(GameTextGet(iname)) then
                 table.insert(items, {entity=entity, name=name})
             end
@@ -286,7 +288,7 @@ function InfoPanel:_draw_onscreen_gui()
         return id
     end
     GuiStartFrame(gui)
-    GuiIdPushString(gui, "spell_finder_panel_info")
+    GuiIdPushString(gui, "world_radar_panel_info")
 
     local padx, pady = self.config.gui.pad_left, self.config.gui.pad_bottom
     local linenr = 0
@@ -332,7 +334,8 @@ function InfoPanel:_init_tables()
     local tables = {
         {"spell_list", "spells", {}},
         {"material_list", "materials", self.config.rare_materials},
-        {"entity_list", "entities", self.config.rare_entities}
+        {"entity_list", "entities", self.config.rare_entities},
+        {"item_list", "items", self.config.rare_items},
     }
 
     for _, entry in ipairs(tables) do
@@ -386,17 +389,20 @@ function InfoPanel:init(environ, host)
     self.env.manage_spells = false
     self.env.manage_materials = false
     self.env.manage_entities = false
+    self.env.manage_items = false
 
     self.env.material_cache = nil
-
     self.env.material_liquid = true
     self.env.material_sand = true
     self.env.material_gas = false
     self.env.material_fire = false
     self.env.material_solid = false
+
+    self.env.spell_list = {}
     self.env.material_list = {}
     self.env.entity_list = {}
-    self.env.spell_list = {}
+    self.env.item_list = {}
+
     self.env.wand_matches = {}
     self.env.card_matches = {}
     self.env.spell_add_multi = false
@@ -424,7 +430,69 @@ function InfoPanel:draw_menu(imgui)
         imgui.EndMenu()
     end
 
-    if imgui.BeginMenu("Spells") then
+    local menus = {
+        -- Plural, singular, env table name, env manage name
+        {"Spells", "Spell", "spell_list", "manage_spells"},
+        {"Materials", "Material", "material_list", "manage_materials"},
+        {"Entities", "Entity", "entity_list", "manage_entities"},
+        {"Items", "Item", "item_list", "manage_items"},
+    }
+    for _, entry in ipairs(menus) do
+        local plname, sname, tvar, evar = unpack(entry)
+        if imgui.BeginMenu(plname) then
+            if imgui.MenuItem("Select " .. plname) then
+                self.env.manage_spells = false
+                self.env.manage_materials = false
+                self.env.manage_entities = false
+                self.env.manage_items = false
+                self.env[evar] = true
+            end
+            imgui.Separator()
+            if imgui.MenuItem("Save " .. sname .. " List (This Run)") then
+                local data = smallfolk.dumps(self.env[tvar])
+                self.host:set_var(self.id, tvar, data)
+                GamePrint(("Saved %d %s"):format(#self.env[tvar], plname:lower()))
+            end
+            if imgui.MenuItem("Load " .. sname .. " List (This Run)") then
+                local data = self.host:get_var(self.id, tvar, "")
+                if data ~= "" then
+                    self.env[tvar] = smallfolk.loads(data)
+                    GamePrint(("Loaded %d %s"):format(#self.env[tvar], plname:lower()))
+                else
+                    GamePrint(("No %s list saved"):format(sname:lower()))
+                end
+            end
+            if imgui.MenuItem("Clear " .. sname .. " List (This Run)") then
+                self.host:set_var(self.id, tvar, "{}")
+                GamePrint(("Cleared %s list"):format(sname:lower()))
+            end
+            imgui.Separator()
+            if imgui.MenuItem("Save " .. sname .. " List (Forever)") then
+                local data = smallfolk.dumps(self.env[tvar])
+                self.host:save_value(self.id, tvar, data)
+                GamePrint(("Saved %d %s"):format(#self.env[tvar], plname:lower()))
+            end
+            if imgui.MenuItem("Load " .. sname .. " List (Forever)") then
+                local data = self.host:load_value(self.id, tvar, "")
+                if data ~= "" then
+                    self.env[tvar] = smallfolk.loads(data)
+                    GamePrint(("Loaded %d %s"):format(#self.env[tvar], plname:lower()))
+                else
+                    GamePrint(("No %s list saved"):format(sname:lower()))
+                end
+            end
+            if imgui.MenuItem("Clear " .. sname .. " List (Forever)") then
+                if self.host:remove_value(self.id, tvar) then
+                    GamePrint(("Cleared %s list"):format(sname:lower()))
+                else
+                    GamePrint(("No %s list saved"):format(sname:lower()))
+                end
+            end
+            imgui.EndMenu()
+        end
+    end
+
+    --[[if imgui.BeginMenu("Spells") then
         if imgui.MenuItem("Select Spells") then
             self.env.manage_spells = true
             self.env.manage_materials = false
@@ -573,7 +641,7 @@ function InfoPanel:draw_menu(imgui)
             end
         end
         imgui.EndMenu()
-    end
+    end]]
 end
 
 function InfoPanel:_draw_checkboxes(imgui)
@@ -809,6 +877,12 @@ function InfoPanel:_draw_entity_list(imgui)
     end
 end
 
+function InfoPanel:_draw_item_dropdown(imgui)
+end
+
+function InfoPanel:_draw_item_list(imgui)
+end
+
 --[[ Public: draw the panel content ]]
 function InfoPanel:draw(imgui)
     self.host:text_clear()
@@ -827,6 +901,11 @@ function InfoPanel:draw(imgui)
     if self.env.manage_entities then
         self:_draw_entity_dropdown(imgui)
         self:_draw_entity_list(imgui)
+    end
+
+    if self.env.manage_items then
+        self:_draw_item_dropdown(imgui)
+        self:_draw_item_list(imgui)
     end
 
     if self.env.biome_list then

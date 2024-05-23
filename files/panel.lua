@@ -33,7 +33,7 @@
 -- luacheck: globals MOD_ID CONF conf_get conf_set
 
 dofile_once("data/scripts/lib/utilities.lua")
-dofile_once("mods/spell_finder/config.lua")
+dofile_once("mods/world_radar/config.lua")
 
 --[[ Template object with default values for the Panel class ]]
 Panel = {
@@ -83,11 +83,11 @@ Panel.SAVE_KEY = MOD_ID .. "_current_panel"
 
 --[[ Built-in panels ]]
 PANELS_NATIVE = {
-    --dofile_once("mods/spell_finder/files/panels/eval.lua"),
-    dofile_once("mods/spell_finder/files/panels/info.lua"),
-    --dofile_once("mods/spell_finder/files/panels/summon.lua"),
-    --dofile_once("mods/spell_finder/files/panels/radar.lua"),
-    --dofile_once("mods/spell_finder/files/panels_old/progress.lua"),
+    --dofile_once("mods/world_radar/files/panels/eval.lua"),
+    dofile_once("mods/world_radar/files/panels/info.lua"),
+    --dofile_once("mods/world_radar/files/panels/summon.lua"),
+    --dofile_once("mods/world_radar/files/panels/radar.lua"),
+    --dofile_once("mods/world_radar/files/panels_old/progress.lua"),
 }
 
 --[[ Create the panel subsystem.

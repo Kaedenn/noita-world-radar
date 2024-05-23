@@ -11,7 +11,7 @@ dofile_once("data/scripts/lib/mod_settings.lua")
 --function mod_setting_changed_callback(mod_id, gui, in_main_menu, setting, old_value, new_value)
 --end
 
-MOD_ID = "spell_finder"
+MOD_ID = "world_radar"
 
 mod_settings_version = 1
 mod_settings = {

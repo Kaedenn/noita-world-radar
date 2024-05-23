@@ -1,4 +1,4 @@
 <Mod
-    name="Spell Finder"
-    description="Radar for locating spells"
+    name="World Information Scanner"
+    description="Highly-configurable scanner for locating items, materials, spells, enemies, and more, with optional on-screen feedback"
 />

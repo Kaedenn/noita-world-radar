@@ -7,9 +7,9 @@
 
 dofile_once("data/scripts/lib/mod_settings.lua")
 
-dofile_once("mods/spell_finder/config.lua")
+dofile_once("mods/world_radar/config.lua")
 
-KPanelLib = dofile("mods/spell_finder/files/panel.lua")
+KPanelLib = dofile("mods/world_radar/files/panel.lua")
 KPanel = nil
 imgui = nil
 
@@ -68,7 +68,7 @@ function OnWorldPostUpdate()
             KPanel:set("info")
         end
 
-        if imgui.Begin("Spell Finder###spell_finder", nil, bit.bor(
+        if imgui.Begin("Spell Finder###world_radar", nil, bit.bor(
             --imgui.WindowFlags.NoFocusOnAppearing,
             --imgui.WindowFlags.NoNavInputs,
             --imgui.WindowFlags.HorizontalScrollbar,

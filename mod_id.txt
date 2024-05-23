@@ -1,1 +1,1 @@
-spell_finder
+world_radar

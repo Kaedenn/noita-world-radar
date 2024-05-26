@@ -2,10 +2,21 @@
 The "Info" Panel: Display interesting information
 
 TODO: Only display the primary biome of a biome group
-TODO: Make rare_materials table configurable
-TODO: Make rare_items table configurable
+
+TODO: Display localized spell names, enemy names
+
+TODO: Implement material scanner selection and list
+TODO: Implement item scanner selection and list, with icons
+
 TODO: Add "include all unknown spells" button
+
 TODO: Add "show triggers" (eg. temple collapse) via barrier spell effect
+
+TODO: Allow user to configure where the on-screen text is displayed
+
+FIXME: Don't scan O(n) for get_entity_by_name, get_spell_by_name
+
+TODO: Maybe inhibit save/load/clear menus if there's nothing to save/load/clear
 --]]
 
 nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
@@ -26,14 +37,15 @@ InfoPanel = {
     config = {
         range = math.huge,
         rare_biome_mod = 0.2,
-        rare_materials = {
+        show_images = true,
+        rare_materials = { -- Default rare material list
             "creepy_liquid",
             "magic_liquid_hp_regeneration", -- Healthium
             "magic_liquid_weakness", -- Diminution
             --"purifying_powder",
             "urine",
         },
-        rare_entities = {
+        rare_entities = { -- Default rare entity list
             "$animal_worm_big",
             --"$animal_wizard_hearty", -- Heart mage; available if desired
             "$animal_chest_leggy",
@@ -42,7 +54,7 @@ InfoPanel = {
             "$animal_playerghost",
             "$animal_shaman_wind", -- Valhe; spell refresh mimic
         },
-        rare_items = {
+        rare_items = { -- Default rare item list
             "$item_chest_treasure_super",
             "$item_greed_die",
         },
@@ -51,7 +63,36 @@ InfoPanel = {
             pad_bottom = 2,
         },
     },
-    env = {},
+    env = {
+        -- list_biomes = true
+        -- find_items = true
+        -- find_enemies = true
+        -- find_spells = true
+        -- onscreen = true
+
+        -- show_checkboxes = true
+        -- manage_spells = false
+        -- manage_materials = false
+        -- manage_entities = false
+        -- manage_items = false
+
+        -- material_cache:table = nil
+        -- material_liquid = true
+        -- material_sand = true
+        -- material_gas = false
+        -- material_fire = false
+        -- material_solid = false
+        -- spell_list = {{id=string, name=string, icon=string}}
+        -- material_list = {{id=string, name=string, type=string}}
+        -- entity_list = {{id=string, name=string, path=string, icon=string}}
+        -- item_list = {{id=string, name=string, icon=string}}
+        -- wand_matches = {{entid={spell_name}}}
+        -- card_matches = {{entid=true}}
+        -- spell_add_multi = false
+        -- material_add_multi = false
+        -- entity_add_multi = false
+        -- item_add_multi = false
+    },
     host = nil,
     funcs = {
         ModTextFileGetContent = ModTextFileGetContent,
@@ -59,9 +100,9 @@ InfoPanel = {
 
     -- Types of information to show: name, varname, default
     modes = {
-        {"Biomes", "biome_list", true},
-        {"Items", "item_list", true},
-        {"Enemies", "enemy_list", true},
+        {"Biomes", "list_biomes", true},
+        {"Items", "find_items", true},
+        {"Enemies", "find_enemies", true},
         {"Spells", "find_spells", true},
         {"On-screen", "onscreen", true},
     },
@@ -119,7 +160,7 @@ end
 --[[ Get all of the known spells ]]
 function InfoPanel:_get_spell_list()
     -- luacheck: globals actions
-    dofile("data/scripts/gun/gun_actions.lua")
+    dofile_once("data/scripts/gun/gun_actions.lua")
     if actions and #actions > 0 then
         return actions
     end
@@ -158,7 +199,36 @@ end
 
 --[[ Get all of the known entities ]]
 function InfoPanel:_get_entities()
-    return dofile("mods/world_radar/files/generated/entity_list.lua")
+    return dofile_once("mods/world_radar/files/generated/entity_list.lua")
+end
+
+--[[ Obtain the entity file path and icon path for a given entity name ]]
+function InfoPanel:_get_entity_by_name(entname)
+    local entlist = self:_get_entities()
+    local ename = entname:gsub("^%$", "")
+    for _, entry in ipairs(entlist) do
+        if entry.name:gsub("^[$]", "") == ename then
+            return entry
+        end
+    end
+    return {id=entname:gsub("^%$animal_", ""), name=entname, path=nil, icon=nil}
+end
+
+--[[ Obtain the spell ID, name, and icon path for a given spell name or ID ]]
+function InfoPanel:_get_spell_by_name(sid, sname)
+    local actions = self:_get_spell_list()
+    local spell_name = sname:gsub("^%$", "")
+    local spell_id = sid:upper()
+    for _, entry in ipairs(actions) do
+        if entry.id == spell_id or entry.name == spell_name then
+            return {
+                id=entry.id,
+                name=entry.name,
+                icon=entry.sprite
+            }
+        end
+    end
+    return {}
 end
 
 --[[ Filter out entities that are children of the player or too far away ]]
@@ -221,7 +291,7 @@ function InfoPanel:_find_items()
     return items
 end
 
---[[ Count the nearby enemies ]]
+--[[ Get all nearby enemies ]]
 function InfoPanel:_get_enemies()
     return self:_filter_entries(get_with_tags({"enemy"}))
 end
@@ -364,6 +434,22 @@ function InfoPanel:_init_tables()
                 #self.env[var], name, from_table))
         end
     end
+
+    -- Perform version updates on certain tables
+    for _, entry in ipairs(self.env.spell_list) do
+        if not entry.icon then
+            local tentry = self:_get_spell_by_name(entry.id, entry.name)
+            if not entry.icon and tentry.icon then entry.icon = tentry.icon end
+        end
+    end
+
+    for _, entry in ipairs(self.env.entity_list) do
+        if not entry.path or not entry.icon then
+            local tentry = self:_get_entity_by_name(entry.name)
+            if not entry.path and tentry.path then entry.path = tentry.path end
+            if not entry.icon and tentry.icon then entry.icon = tentry.icon end
+        end
+    end
 end
 
 --[[ Public: initialize the panel ]]
@@ -385,6 +471,7 @@ function InfoPanel:init(environ, host)
 
     self.biomes = self:_get_biome_data()
     self.gui = GuiCreate()
+
     self.env.show_checkboxes = true
     self.env.manage_spells = false
     self.env.manage_materials = false
@@ -406,6 +493,9 @@ function InfoPanel:init(environ, host)
     self.env.wand_matches = {}
     self.env.card_matches = {}
     self.env.spell_add_multi = false
+    self.env.material_add_multi = false
+    self.env.entity_add_multi = false
+    self.env.item_add_multi = false
 
     local this = self
     local wrapper = function() return this._init_tables(this) end
@@ -491,157 +581,6 @@ function InfoPanel:draw_menu(imgui)
             imgui.EndMenu()
         end
     end
-
-    --[[if imgui.BeginMenu("Spells") then
-        if imgui.MenuItem("Select Spells") then
-            self.env.manage_spells = true
-            self.env.manage_materials = false
-            self.env.manage_entities = false
-        end
-        imgui.Separator()
-        if imgui.MenuItem("Save Spell List (This Run)") then
-            local data = smallfolk.dumps(self.env.spell_list)
-            self.host:set_var(self.id, "spell_list", data)
-            GamePrint(("Saved %d spells"):format(#self.env.spell_list))
-        end
-        if imgui.MenuItem("Load Spell List (This Run)") then
-            local data = self.host:get_var(self.id, "spell_list", "")
-            if data ~= "" then
-                self.env.spell_list = smallfolk.loads(data)
-                GamePrint(("Loaded %d spells"):format(#self.env.spell_list))
-            else
-                GamePrint("No spell list saved")
-            end
-        end
-        if imgui.MenuItem("Clear Spell List (This Run)") then
-            self.host:set_var(self.id, "spell_list", "{}")
-            GamePrint("Cleared spell list")
-        end
-
-        imgui.Separator()
-        if imgui.MenuItem("Save Spell List (Forever)") then
-            local data = smallfolk.dumps(self.env.spell_list)
-            self.host:save_value(self.id, "spell_list", data)
-            GamePrint(("Saved %d spells"):format(#self.env.spell_list))
-        end
-        if imgui.MenuItem("Load Spell List (Forever)") then
-            local data = self.host:load_value(self.id, "spell_list", "")
-            if data ~= "" then
-                self.env.spell_list = smallfolk.loads(data)
-                GamePrint(("Loaded %d spells"):format(#self.env.spell_list))
-            else
-                GamePrint("No spell list saved")
-            end
-        end
-        if imgui.MenuItem("Clear Spell List (Forever)") then
-            if self.host:remove_value(self.id, "spell_list") then
-                GamePrint("Cleared spell list")
-            else
-                GamePrint("No spell list saved")
-            end
-        end
-        imgui.EndMenu()
-    end
-
-    if imgui.BeginMenu("Materials") then
-        if imgui.MenuItem("Select Rare Materials") then
-            self.env.manage_spells = false
-            self.env.manage_materials = true
-            self.env.manage_entities = false
-        end
-        imgui.Separator()
-        if imgui.MenuItem("Save Material List (This Run)") then
-            local data = smallfolk.dumps(self.env.material_list)
-            self.host:set_var(self.id, "material_list", data)
-            GamePrint(("Saved %d materials"):format(#self.env.material_list))
-        end
-        if imgui.MenuItem("Load Material List (This Run)") then
-            local data = self.host:get_var(self.id, "material_list", "")
-            if data ~= "" then
-                self.env.material_list = smallfolk.loads(data)
-                GamePrint(("Loaded %d materials"):format(#self.env.material_list))
-            else
-                GamePrint("No material list saved")
-            end
-        end
-        if imgui.MenuItem("Clear Material List (This Run)") then
-            self.host:set_var(self.id, "material_list", "{}")
-            GamePrint("Cleared material list")
-        end
-        imgui.Separator()
-        if imgui.MenuItem("Save Material List (Forever)") then
-            local data = smallfolk.dumps(self.env.material_list)
-            self.host:save_value(self.id, "material_list", data)
-            GamePrint(("Saved %d materials"):format(#self.env.material_list))
-        end
-        if imgui.MenuItem("Load Material List (Forever)") then
-            local data = self.host:load_value(self.id, "material_list", "")
-            if data ~= "" then
-                self.env.material_list = smallfolk.loads(data)
-                GamePrint(("Loaded %d materials"):format(#self.env.material_list))
-            else
-                GamePrint("No material list saved")
-            end
-        end
-        if imgui.MenuItem("Clear Material List (Forever)") then
-            if self.host:remove_value(self.id, "material_list") then
-                GamePrint("Cleared material list")
-            else
-                GamePrint("No material list saved")
-            end
-        end
-        imgui.EndMenu()
-    end
-
-    if imgui.BeginMenu("Entities") then
-        if imgui.MenuItem("Select Rare Entities") then
-            self.env.manage_spells = false
-            self.env.manage_materials = false
-            self.env.manage_entities = true
-        end
-        imgui.Separator()
-        if imgui.MenuItem("Save Entity List (This Run)") then
-            local data = smallfolk.dumps(self.env.entity_list)
-            self.host:set_var(self.id, "entity_list", data)
-            GamePrint(("Saved %d entities"):format(#self.env.entity_list))
-        end
-        if imgui.MenuItem("Load Entity List (This Run)") then
-            local data = self.host:get_var(self.id, "entity_list", "")
-            if data ~= "" then
-                self.env.entity_list = smallfolk.loads(data)
-                GamePrint(("Loaded %d entities"):format(#self.env.entity_list))
-            else
-                GamePrint("No entity list saved")
-            end
-        end
-        if imgui.MenuItem("Clear Entity List (This Run)") then
-            self.host:set_var(self.id, "entity_list", "{}")
-            GamePrint("Cleared entity list")
-        end
-        imgui.Separator()
-        if imgui.MenuItem("Save Entity List (Forever)") then
-            local data = smallfolk.dumps(self.env.entity_list)
-            self.host:save_value(self.id, "entity_list", data)
-            GamePrint(("Saved %d entities"):format(#self.env.entity_list))
-        end
-        if imgui.MenuItem("Load Entity List (Forever)") then
-            local data = self.host:load_value(self.id, "entity_list", "")
-            if data ~= "" then
-                self.env.entity_list = smallfolk.loads(data)
-                GamePrint(("Loaded %d entities"):format(#self.env.entity_list))
-            else
-                GamePrint("No entity list saved")
-            end
-        end
-        if imgui.MenuItem("Clear Entity List (Forever)") then
-            if self.host:remove_value(self.id, "entity_list") then
-                GamePrint("Cleared entity list")
-            else
-                GamePrint("No entity list saved")
-            end
-        end
-        imgui.EndMenu()
-    end]]
 end
 
 function InfoPanel:_draw_checkboxes(imgui)
@@ -682,7 +621,12 @@ function InfoPanel:_draw_spell_dropdown(imgui)
 
     if self.env.spell_text ~= "" then
         local spell_list = self:_get_spell_list()
-        for _, entry in ipairs(spell_list) do
+        for _, spell_entry in ipairs(spell_list) do
+            local entry = {
+                id = spell_entry.id,
+                name = spell_entry.name,
+                icon = spell_entry.sprite
+            }
             local add_me = false
             if entry.id:match(self.env.spell_text:upper()) then
                 add_me = true
@@ -704,9 +648,17 @@ function InfoPanel:_draw_spell_dropdown(imgui)
             if add_me then
                 if imgui.SmallButton("Add###add_" .. entry.id) then
                     if not self.env.spell_add_multi then self.env.spell_text = "" end
-                    table.insert(self.env.spell_list, {name=entry.name, id=entry.id})
+                    table.insert(self.env.spell_list, entry)
                 end
                 imgui.SameLine()
+                if entry.icon and self.config.show_images then
+                    local img = imgui.LoadImage(entry.icon)
+                    if img then
+                        imgui.Image(img, img.width, img.height)
+                        imgui.SameLine()
+                    end
+                end
+                -- TODO: Make text configurable on localization
                 imgui.Text(("%s (%s)"):format(GameTextGet(entry.name), entry.id))
             end
         end
@@ -723,11 +675,19 @@ function InfoPanel:_draw_spell_list(imgui)
                 to_remove = idx
             end
             imgui.SameLine()
+            if entry.icon and self.config.show_images then
+                local img = imgui.LoadImage(entry.icon)
+                if img then
+                    imgui.Image(img, img.width, img.height)
+                    imgui.SameLine()
+                end
+            end
             local label = entry.name
             if label:match("^[$]") then
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
+            -- TODO: Make text configurable on localization
             imgui.Text(("%s [%s]"):format(label, entry.id))
         end
         if to_remove ~= nil then
@@ -791,6 +751,7 @@ function InfoPanel:_draw_material_list(imgui)
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
+            -- TODO: Make text configurable on localization
             imgui.Text(("%s [%s]"):format(label, entry.id))
         end
         if to_remove ~= nil then
@@ -844,9 +805,22 @@ function InfoPanel:_draw_entity_dropdown(imgui)
             if add_me then
                 if imgui.SmallButton("Add###add_" .. entry.name) then
                     if not self.env.entity_add_multi then self.env.entity_text = "" end
-                    table.insert(self.env.entity_list, {id=entry.name, name=locname, path=entry.path})
+                    table.insert(self.env.entity_list, {
+                        id=entry.name,
+                        name=locname,
+                        path=entry.path,
+                        icon=entry.icon,
+                    })
                 end
                 imgui.SameLine()
+                if self.config.show_images then
+                    local img = imgui.LoadImage(entry.icon)
+                    if img then
+                        imgui.Image(img, img.width, img.height)
+                        imgui.SameLine()
+                    end
+                end
+                -- TODO: Make text configurable on localization
                 imgui.Text(("%s (%s)"):format(locname, entry.name))
             end
         end
@@ -863,11 +837,19 @@ function InfoPanel:_draw_entity_list(imgui)
                 to_remove = idx
             end
             imgui.SameLine()
+            if entry.icon and self.config.show_images then
+                local img = imgui.LoadImage(entry.icon)
+                if img then
+                    imgui.Image(img, img.width, img.height)
+                    imgui.SameLine()
+                end
+            end
             local label = entry.name
             if label:match("^[$]") then
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
+            -- TODO: Make text configurable on localization
             imgui.Text(("%s [%s]"):format(label, entry.id))
         end
         if to_remove ~= nil then
@@ -877,15 +859,19 @@ function InfoPanel:_draw_entity_list(imgui)
     end
 end
 
+-- TODO
 function InfoPanel:_draw_item_dropdown(imgui)
 end
 
+-- TODO
 function InfoPanel:_draw_item_list(imgui)
 end
 
 --[[ Public: draw the panel content ]]
 function InfoPanel:draw(imgui)
     self.host:text_clear()
+    self.config.show_images = ModSettingGet(MOD_ID .. ".show_images")
+    if self.config.show_images == nil then self.config.show_images = true end
 
     self:_draw_checkboxes(imgui)
     if self.env.manage_spells then
@@ -908,7 +894,7 @@ function InfoPanel:draw(imgui)
         self:_draw_item_list(imgui)
     end
 
-    if self.env.biome_list then
+    if self.env.list_biomes then
         --[[ Print all non-default biome modifiers ]]
         for bname, bdata in pairs(self.biomes) do
             line = ("%s: %s (%0.1f)"):format(bdata.name, bdata.text, bdata.probability)
@@ -918,13 +904,9 @@ function InfoPanel:draw(imgui)
                 self.host:p(line)
             end
         end
-        --[[ Debugging: print the unlocalized strings from above
-        for bname, bdata in pairs(self.biomes) do
-            self.host:d(("%s: %s"):format(bname, bdata.modifier))
-        end]]
     end
 
-    if self.env.item_list then
+    if self.env.find_items then
         self.host:p(self.host.separator)
         for _, entry in ipairs(aggregate(self:_get_items())) do
             local name, entities = unpack(entry)
@@ -959,7 +941,7 @@ function InfoPanel:draw(imgui)
         end
     end
 
-    if self.env.enemy_list then
+    if self.env.find_enemies then
         self.host:p(self.host.separator)
         for _, entry in ipairs(aggregate(self:_get_enemies())) do
             local name, entities = unpack(entry)
@@ -978,6 +960,7 @@ function InfoPanel:draw(imgui)
         for entid, ent_spells in pairs(self.env.wand_matches) do
             local spell_list = {}
             for spell_name, _ in pairs(ent_spells) do
+                -- TODO: Display localized spell name
                 table.insert(spell_list, spell_name)
             end
             local spells = table.concat(spell_list, ", ")
@@ -991,6 +974,7 @@ function InfoPanel:draw(imgui)
 
         for entid, _ in pairs(self.env.card_matches) do
             local spell = card_get_spell(entid)
+            -- TODO: Display localized spell name
             self.host:p(("Spell %s detected nearby!!"):format(spell))
             local wx, wy = EntityGetTransform(entid)
             if wx ~= nil and wy ~= nil and wx ~= 0 and wy ~= 0 then

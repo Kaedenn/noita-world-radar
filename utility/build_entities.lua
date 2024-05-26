@@ -74,6 +74,35 @@ options:
     return args
 end
 
+--[[ Open and read a file ]]
+local function read_file(path)
+    local fobj = io.open(path, "r")
+    local data = fobj:read("*all")
+    fobj:close()
+    return data
+end
+
+--[[ Open and read a file into a table of lines ]]
+local function read_lines(path)
+    local fobj = io.open(path, "r") or error("Failed to open " .. path)
+    local lines = {}
+    for line in fobj:lines() do
+        table.insert(lines, line)
+    end
+    fobj:close()
+    return lines
+end
+
+--[[ Read the icon file into a usable table ]]
+local function read_icon_file(data_path)
+    local lines = read_lines(data_path .. "/ui_gfx/animal_icons/_list.txt")
+    local icons = {}
+    for _, ent_name in ipairs(lines) do
+        icons[ent_name] = ("data/ui_gfx/animal_icons/%s.png"):format(ent_name)
+    end
+    return icons
+end
+
 nxml = require 'nxml'
 kae = require 'libkae'
 minifs = require 'minifs'
@@ -111,18 +140,17 @@ function main()
         return result
     end
 
-    --[[ Open and read a file ]]
-    local function read_file(path)
-        local fobj = io.open(path, "r")
-        local data = fobj:read("*all")
-        fobj:close()
-        return data
-    end
-
     local data = table.concat({
         argv.data_path, "entities", "animals"
     }, minifs.PATH_SEPARATOR)
     pdebug("Searching for xml files in " .. data)
+
+    local icons = {}
+    for name in minifs.listdir(argv.data_path .. "/ui_gfx/animal_icons") do
+        if name:match("[.]png$") then
+            icons[name:gsub("[.]png$", "")] = "data/ui_gfx/animal_icons/" .. name
+        end
+    end
 
     local entlist = {}
     for _, name in ipairs(find_with_extension(data, "xml")) do
@@ -131,7 +159,14 @@ function main()
         if root.name == "Entity" and root.attr.name then
             local ename = root.attr.name
             local fpath = name:match("[/\\](data[/\\].*)")
-            if ename:match("^[$]animal_") then
+            if ename == "$animal_lukki" and fpath:match("chest_leggy%.xml") then
+                ename = "$animal_chest_leggy"
+            end
+
+            if fpath:match("/illusions/") then
+                pdebug(("File %s at %q defines illusory entity %q; skipping"):format(
+                    fpath, name, ename))
+            elseif ename:match("^[$]animal_") then
                 pdebug(("File %s at %q defines entity %q"):format(fpath, name, ename))
                 table.insert(entlist, {fpath, ename})
             else
@@ -153,8 +188,13 @@ return {
 ]])
     for _, entry in ipairs(entlist) do
         local entpath, entname = unpack(entry)
-        ofile:write(([[  {name = %q, path = %q},
-]]):format(entname, entpath))
+        local entid = string.match(entpath, "([^/]*)%.xml$")
+        local icon = icons[entid] or ""
+        if icon == "" then
+            icon = icons[entname:gsub("^[$]animal_", "")] or ""
+        end
+        ofile:write(([[  {id=%q, name=%q, path=%q, icon=%q},
+]]):format(entid, entname, entpath, icon))
     end
     ofile:write([[
 }

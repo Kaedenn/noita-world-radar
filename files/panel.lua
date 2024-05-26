@@ -30,6 +30,8 @@
 -- Panels are allowed to have whatever else they desire in their panel table.
 --]]
 
+-- TODO: Allow for {image="<path>"} in Panel.lines
+
 -- luacheck: globals MOD_ID CONF conf_get conf_set
 
 dofile_once("data/scripts/lib/utilities.lua")
@@ -384,7 +386,9 @@ function Panel:build_menu(imgui)
 end
 
 --[[ Private: draw a line to the feedback box ]]
-function Panel:_draw_line(imgui, line)
+function Panel:_draw_line(imgui, line, show_images, show_color)
+    if show_images == nil then show_images = true end
+    if show_color == nil then show_color = true end
     if type(line) == "table" then
         local level = line.level or nil
         local color = line.color or nil
@@ -392,21 +396,30 @@ function Panel:_draw_line(imgui, line)
             color = self.colors[level] or nil
         end
 
-        if color ~= nil then
+        if color ~= nil and show_color then
             if type(color) == "string" then
                 color = self.colors.names[color] or {1, 1, 1}
             end
             imgui.PushStyleColor(imgui.Col.Text, unpack(color))
         end
+
+        if line.image and show_images then
+            local img = imgui.LoadImage(line.image)
+            if img then
+                imgui.Image(img, line.width or img.width, line.height or img.height)
+                imgui.SameLine()
+            end
+        end
+
         for idx, token in ipairs(line) do
             if idx ~= 1 then imgui.SameLine() end
             if level ~= nil then
                 imgui.Text(("%s:"):format(level))
                 imgui.SameLine()
             end
-            self:_draw_line(imgui, token)
+            self:_draw_line(imgui, token, show_images, show_color)
         end
-        if color ~= nil then
+        if color ~= nil and show_color then
             imgui.PopStyleColor()
         end
     elseif line == self.separator then
@@ -446,8 +459,10 @@ function Panel:draw(imgui)
         imgui.PopID()
     end
 
+    local show_images = ModSettingGet(MOD_ID .. ".show_images")
+    local show_color = ModSettingGet(MOD_ID .. ".color")
     for _, line in ipairs(self.lines) do
-        self:_draw_line(imgui, line)
+        self:_draw_line(imgui, line, show_images, show_color)
     end
 end
 

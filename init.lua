@@ -1,7 +1,14 @@
---[[ Spell Finder
+--[[ World Radar
 --
--- This mod serves the "Info" panel of the kae_test mod with a few
--- modifications.
+-- This mod displays the following information:
+--  Biome modifier list
+--  Nearby (actually, all loaded) enememies
+--  Nearby items/flasks/pouches/chests
+--
+--  Nearby configured enemies
+--  Nearby configured spells or wands containing configured spells
+--  Nearby configured items
+--  Nearby configured material containers
 --
 --]]
 
@@ -68,7 +75,7 @@ function OnWorldPostUpdate()
             KPanel:set("info")
         end
 
-        if imgui.Begin("Spell Finder###world_radar", nil, bit.bor(
+        if imgui.Begin("World Radar###world_radar", nil, bit.bor(
             --imgui.WindowFlags.NoFocusOnAppearing,
             --imgui.WindowFlags.NoNavInputs,
             --imgui.WindowFlags.HorizontalScrollbar,

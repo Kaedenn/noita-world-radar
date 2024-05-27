@@ -26,4 +26,9 @@ function container_get_contents(entity)
     return results
 end
 
+--[[ Get the (probable) path to the material icon ]]
+function material_get_icon(matname)
+    return ("data/generated/material_icons/%s.png"):format(matname)
+end
+
 -- vim: set ts=4 sts=4 sw=4:

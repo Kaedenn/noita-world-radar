@@ -244,6 +244,7 @@ end
 function Panel:print(msg)
     self:p(msg)
     GamePrint(msg)
+    print(msg) -- Writes to logger.txt if logging is enabled
 end
 
 --[[ True if the given panel ID refers to a known Panel object ]]

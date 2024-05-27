@@ -142,6 +142,18 @@ function get_health(entity)
     return {health, maxhealth}
 end
 
+--[[ True if the entity entry matches the given search term ]]
+function entity_match(entry, term)
+    if entry.id and term == entry.id then return true end
+    if entry.name then
+        if term == entry.name then return true end
+        if term:gsub("^%$") == entry.name:gsub("^%$") then return true end
+        if term == GameTextGet(entry.name) then return true end
+    end
+    if entry.path and entry.path:match(term) then return true end
+    return false
+end
+
 --[[ Get all entities having one of the given tags
 --
 -- Returns a table of {entity_id, entity_name} pairs.

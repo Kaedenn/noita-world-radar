@@ -5,7 +5,6 @@ TODO: Only display the primary biome of a biome group
 
 TODO: Display localized spell names, enemy names
 
-TODO: Implement material scanner selection and list
 TODO: Implement item scanner selection and list, with icons
 
 TODO: Add "include all unknown spells" button
@@ -22,15 +21,29 @@ TODO: Maybe inhibit save/load/clear menus if there's nothing to save/load/clear
 nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
 smallfolk = dofile_once("mods/world_radar/files/lib/smallfolk.lua")
 
+dofile_once("mods/world_radar/config.lua")
+-- luacheck: globals MOD_ID
 dofile_once("mods/world_radar/files/utility/biome.lua")
 -- luacheck: globals biome_is_default biome_modifier_get
 dofile_once("mods/world_radar/files/utility/entity.lua")
--- luacheck: globals is_child_of entity_is_item entity_is_enemy item_get_name enemy_get_name get_name get_health get_with_tags distance_from
+-- luacheck: globals is_child_of entity_is_item entity_is_enemy item_get_name enemy_get_name get_name get_health entity_match get_with_tags distance_from
 dofile_once("mods/world_radar/files/utility/material.lua")
--- luacheck: globals container_get_contents
+-- luacheck: globals container_get_contents material_get_icon
 dofile_once("mods/world_radar/files/utility/spell.lua")
 -- luacheck: globals card_get_spell wand_get_spells
 
+--[[ Panel class with default values.
+--
+-- Selection menus (spell, material, entity, item) operate as follows:
+--  self.env.find_<menu>=true       Master enable/disable checkbox
+--  self.env.<menu>_list            Table of selected items
+--      <menu>_list[idx].id         Internal ID or unlocalized name
+--      <menu>_list[idx].name       Display (possibly localized) name
+--      <menu>_list[idx].icon       Path to icon image, if one exists
+--      <menu>_list[idx].path       Path to asset file, if applicable
+--  self.env.<menu>_add_multi=false Allow multiple additions per input
+--  self.env.<menu>_text:string     Current input text
+--]]
 InfoPanel = {
     id = "info",
     name = "Info",
@@ -76,12 +89,14 @@ InfoPanel = {
         -- manage_entities = false
         -- manage_items = false
 
-        -- material_cache:table = nil
+        -- material_cache:table = {liquids={name}, gases={name}, ...}
         -- material_liquid = true
         -- material_sand = true
         -- material_gas = false
         -- material_fire = false
         -- material_solid = false
+        -- entity_cache:table = nil
+
         -- spell_list = {{id=string, name=string, icon=string}}
         -- material_list = {{id=string, name=string, type=string}}
         -- entity_list = {{id=string, name=string, path=string, icon=string}}
@@ -110,6 +125,17 @@ InfoPanel = {
     -- For debugging, provide access to the local functions
     _private_funcs = {},
 }
+
+--[[ True if the given table is truly empty ]]
+local function table_empty(tbl)
+    if tbl == nil then return true end
+    if #tbl > 0 then return false end
+    local empty = true
+    for key, val in pairs(tbl) do
+        empty = false
+    end
+    return empty
+end
 
 --[[ Collect {id, name} pairs into {name, {id...}} sets ]]
 local function aggregate(entries)
@@ -185,7 +211,7 @@ function InfoPanel:_want_spell(spell)
 end
 
 --[[ Get all of the known materials ]]
-function InfoPanel:_get_materials()
+function InfoPanel:_get_material_tables()
     if not self.env.material_cache or #self.env.material_cache == 0 then
         self.env.material_cache = {}
         self.env.material_cache.liquids = CellFactory_GetAllLiquids()
@@ -198,36 +224,56 @@ function InfoPanel:_get_materials()
 end
 
 --[[ Get all of the known entities ]]
-function InfoPanel:_get_entities()
-    return dofile_once("mods/world_radar/files/generated/entity_list.lua")
-end
-
---[[ Obtain the entity file path and icon path for a given entity name ]]
-function InfoPanel:_get_entity_by_name(entname)
-    local entlist = self:_get_entities()
-    local ename = entname:gsub("^%$", "")
-    for _, entry in ipairs(entlist) do
-        if entry.name:gsub("^[$]", "") == ename then
-            return entry
-        end
+function InfoPanel:_get_entity_list()
+    if not self.env.entity_cache or #self.env.entity_cache == 0 then
+        self.env.entity_cache = dofile("mods/world_radar/files/generated/entity_list.lua")
     end
-    return {id=entname:gsub("^%$animal_", ""), name=entname, path=nil, icon=nil}
+    return self.env.entity_cache
 end
 
 --[[ Obtain the spell ID, name, and icon path for a given spell name or ID ]]
 function InfoPanel:_get_spell_by_name(sid, sname)
-    local actions = self:_get_spell_list()
     local spell_name = sname:gsub("^%$", "")
     local spell_id = sid:upper()
-    for _, entry in ipairs(actions) do
+    for _, entry in ipairs(self:_get_spell_list()) do
         if entry.id == spell_id or entry.name == spell_name then
             return {
-                id=entry.id,
-                name=entry.name,
-                icon=entry.sprite
+                id = entry.id,
+                name = entry.name,
+                icon = entry.sprite
             }
         end
     end
+    return {}
+end
+
+--[[ Obtain the material ID, name, etc. for the given name ]]
+function InfoPanel:_get_material_by_name(mname)
+    local mid = CellFactory_GetType(mname)
+    if mid < 0 then
+        self.host:print(("Unknown material %q"):format(mname))
+        return {}
+    end
+    self.host:print(("Material %q has ID %d"):format(mname, mid))
+    return {
+        id = mid,
+        name = mname,
+        uiname = CellFactory_GetUIName(mid)
+    }
+end
+
+--[[ Obtain the entity ID, name, etc. for the given name ]]
+function InfoPanel:_get_entity_by_name(ename)
+    for _, entry in ipairs(self:_get_entity_list()) do
+        if ename == entry.id or ename == entry.name then
+            return entry
+        end
+    end
+    return {}
+end
+
+--[[ Obtain the item ID, name, etc. for the given name ]]
+function InfoPanel:_get_item_by_name(iname)
     return {}
 end
 
@@ -253,15 +299,15 @@ function InfoPanel:_get_items()
     return self:_filter_entries(get_with_tags({"item_pickup"}))
 end
 
---[[ Locate any flasks/pouches containing rare materials (FIXME: use material_list) ]]
+--[[ Locate any flasks/pouches containing rare materials ]]
 function InfoPanel:_find_containers()
     local containers = {}
     for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
         local entity, name = unpack(item)
         local contents = container_get_contents(entity)
         local rare_mats = {}
-        for _, material in ipairs(self.config.rare_materials) do -- FIXME: material_list
-            if contents[material] and contents[material] > 0 then
+        for _, material in ipairs(self.env.material_list) do
+            if contents[material.name] and contents[material.name] > 0 then
                 table.insert(rare_mats, material)
             end
         end
@@ -301,14 +347,20 @@ function InfoPanel:_find_enemies()
     local enemies = {}
     local rare_ents = {}
     for _, entry in ipairs(self.env.entity_list) do
-        rare_ents[entry.id] = 1
+        rare_ents[entry.id] = entry
     end
     for _, enemy in ipairs(self:_get_enemies()) do
         local entity, name = unpack(enemy)
         local entname = EntityGetName(entity)
         if not entname or entname == "" then entname = name end
         if rare_ents[entname] then
-            table.insert(enemies, {entity=entity, name=name})
+            local entry = {}
+            for key, val in ipairs(rare_ents[entname]) do
+                entry[key] = val
+            end
+            entry.entity = entity
+            entry.name = name
+            table.insert(enemies, entry)
         end
     end
     return enemies
@@ -370,16 +422,20 @@ function InfoPanel:_draw_onscreen_gui()
 
     for _, entry in ipairs(aggregate(self:_find_enemies())) do
         local entname, entities = unpack(entry)
-        draw_text(("%dx %s"):format(#entities, entname))
+        draw_text(("%dx %s detected nearby!!"):format(#entities, entname))
     end
 
     for _, entry in ipairs(self:_find_items()) do
-        draw_text(entry.name)
+        draw_text(("%s detected nearby!!"):format(entry.name))
     end
 
-    for _, entity in ipairs(self:_find_containers()) do
-        local contents = table.concat(entity.rare_contents, ", ")
-        draw_text(("%s with %s"):format(entity.name, contents))
+    for _, entry in ipairs(self:_find_containers()) do
+        local contents = {}
+        for _, material in ipairs(entry.rare_contents) do
+            table.insert(contents, GameTextGet(material.uiname))
+        end
+        draw_text(("%s with %s detected nearby!!"):format(
+            entry.name, table.concat(contents, ", ")))
     end
 
     for entid, ent_spells in pairs(self.env.wand_matches) do
@@ -424,7 +480,21 @@ function InfoPanel:_init_tables()
         if #data == 0 then
             data = {}
             for _, item in ipairs(default) do
-                table.insert(data, {id=item, name=item})
+                local new_entry = nil
+                if var == "spell_list" then
+                    new_entry = self:_get_spell_by_name(item, item)
+                elseif var == "material_list" then
+                    new_entry = self:_get_material_by_name(item)
+                elseif var == "entity_list" then
+                    new_entry = self:_get_entity_by_name(item)
+                elseif var == "item_list" then
+                    new_entry = self:_get_item_by_name(item)
+                end
+                if not new_entry or table_empty(new_entry) then
+                    new_entry = {id=item, name=item, path=nil, icon=nil}
+                    print(("Failed to map %s %q"):format(var, item))
+                end
+                table.insert(data, new_entry)
             end
             from_table = "default"
         end
@@ -432,22 +502,6 @@ function InfoPanel:_init_tables()
             self.env[var] = data
             self.host:print(("Loaded %d %s from %s table"):format(
                 #self.env[var], name, from_table))
-        end
-    end
-
-    -- Perform version updates on certain tables
-    for _, entry in ipairs(self.env.spell_list) do
-        if not entry.icon then
-            local tentry = self:_get_spell_by_name(entry.id, entry.name)
-            if not entry.icon and tentry.icon then entry.icon = tentry.icon end
-        end
-    end
-
-    for _, entry in ipairs(self.env.entity_list) do
-        if not entry.path or not entry.icon then
-            local tentry = self:_get_entity_by_name(entry.name)
-            if not entry.path and tentry.path then entry.path = tentry.path end
-            if not entry.icon and tentry.icon then entry.icon = tentry.icon end
         end
     end
 end
@@ -484,6 +538,7 @@ function InfoPanel:init(environ, host)
     self.env.material_gas = false
     self.env.material_fire = false
     self.env.material_solid = false
+    self.env.entity_cache = nil
 
     self.env.spell_list = {}
     self.env.material_list = {}
@@ -516,6 +571,10 @@ function InfoPanel:draw_menu(imgui)
     if imgui.BeginMenu(self.name) then
         if imgui.MenuItem("Toggle Checkboxes") then
             self.env.show_checkboxes = not self.env.show_checkboxes
+        end
+        if imgui.MenuItem("Toggle Images") then
+            self.config.show_images = not self.config.show_images
+            ModSettingSet(MOD_ID .. ".show_images", self.config.show_images)
         end
         imgui.EndMenu()
     end
@@ -602,13 +661,12 @@ end
 
 function InfoPanel:_draw_spell_dropdown(imgui)
     if not self.env.spell_text then self.env.spell_text = "" end
-    local ret, text = false, self.env.spell_text
     imgui.SetNextItemWidth(400)
-    ret, text = imgui.InputText("Spell###spell_input", text)
-    if ret then self.env.spell_text = text end
+    _, self.env.spell_text = imgui.InputText("Spell###spell_input", self.env.spell_text)
     imgui.SameLine()
     if imgui.SmallButton("Done###spell_done") then
         self.env.manage_spells = false
+        self.env.spell_text = ""
     end
     imgui.SameLine()
     if imgui.SmallButton("Save###spell_save") then
@@ -667,8 +725,7 @@ end
 
 function InfoPanel:_draw_spell_list(imgui)
     local to_remove = nil
-    local flags = bit.bor(
-        imgui.WindowFlags.HorizontalScrollbar)
+    local flags = imgui.WindowFlags.HorizontalScrollbar
     if imgui.BeginChild("Spell List###spell_list", 0, 0, true, flags) then
         for idx, entry in ipairs(self.env.spell_list) do
             if imgui.SmallButton("Remove###remove_" .. entry.id) then
@@ -699,13 +756,12 @@ end
 
 function InfoPanel:_draw_material_dropdown(imgui)
     if not self.env.material_text then self.env.material_text = "" end
-    local ret, text = false, self.env.material_text
     imgui.SetNextItemWidth(400)
-    ret, text = imgui.InputText("Material###material_input", text)
-    if ret then self.env.material_text = text end
+    _, self.env.material_text = imgui.InputText("Material###material_input", self.env.material_text)
     imgui.SameLine()
     if imgui.SmallButton("Done###material_done") then
         self.env.manage_materials = false
+        self.env.material_text = ""
     end
     imgui.SameLine()
     if imgui.SmallButton("Save###material_save") then
@@ -716,43 +772,93 @@ function InfoPanel:_draw_material_dropdown(imgui)
     imgui.SameLine()
     _, self.env.material_add_multi = imgui.Checkbox("Multi###material_multi", self.env.material_add_multi)
 
+    -- {name, checkbox_varname, table_name}
     local kinds = {
-        {"Liquids", "material_liquid"},
-        {"Sands", "material_sand"},
-        {"Gases", "material_gas"},
-        {"Fires", "material_fire"},
-        {"Solids", "material_solid"},
+        {"Liquids", "material_liquid", "liquids"},
+        {"Sands", "material_sand", "sands"},
+        {"Gases", "material_gas", "gases"},
+        {"Fires", "material_fire", "fires"},
+        {"Solids", "material_solid", "solids"},
     }
     for idx, kind in ipairs(kinds) do
-        local label, var = unpack(kind)
+        local label, var, tbl = unpack(kind)
         if idx ~= 1 then imgui.SameLine() end
         imgui.SetNextItemWidth(80)
-        _, self.env[var] = imgui.Checkbox(label .. "###" .. var, self.env[var])
+        _, self.env[var] = imgui.Checkbox(label .. "###show_" .. var, self.env[var])
     end
 
     if self.env.material_text ~= "" then
-        local mattabs = self:_get_materials()
-        -- TODO
+        local mattabs = self:_get_material_tables()
+        for _, kind in ipairs(kinds) do
+            local label, var, tbl = unpack(kind)
+            local mats = self.env.material_cache[tbl]
+            if not self.env[var] then mats = {} end
+            for _, matname in ipairs(mats) do
+                local matid = CellFactory_GetType(matname)
+                local uiname = CellFactory_GetUIName(matid)
+                local add_me = false
+                if matname:match(self.env.material_text) then
+                    add_me = true
+                elseif uiname:match(self.env.material_text) then
+                    add_me = true
+                elseif GameTextGet(uiname):match(self.env.material_text) then
+                    add_me = true
+                end
+
+                -- Hide duplicate materials from being added more than once
+                for _, entry in ipairs(self.env.material_list) do
+                    if matid == entry.id then
+                        add_me = false
+                    end
+                end
+
+                if add_me then
+                    if imgui.SmallButton("Add###add_mat_" .. matname) then
+                        if not self.env.material_add_multi then self.env.material_text = "" end
+                        table.insert(self.env.material_list, {
+                            id = matid,
+                            name = matname,
+                            uiname = uiname,
+                        })
+                    end
+                    imgui.SameLine()
+                    if self.config.show_images then
+                        local img = imgui.LoadImage(material_get_icon(matname))
+                        if img then
+                            imgui.Image(img, img.width, img.height)
+                            imgui.SameLine()
+                        end
+                    end
+                    -- TODO: Make text configurable on localization
+                    imgui.Text(("%s (%s)"):format(GameTextGet(uiname), matname))
+                end
+            end
+        end
     end
 end
 
 function InfoPanel:_draw_material_list(imgui)
     local to_remove = nil
-    local flags = bit.bor(
-        imgui.WindowFlags.HorizontalScrollbar)
+    local flags = imgui.WindowFlags.HorizontalScrollbar
     if imgui.BeginChild("Material List###material_list", 0, 0, true, flags) then
         for idx, entry in ipairs(self.env.material_list) do
             if imgui.SmallButton("Remove###remove_" .. entry.id) then
                 to_remove = idx
             end
             imgui.SameLine()
-            local label = entry.name
-            if label:match("^[$]") then
-                label = GameTextGet(entry.name)
-                if not label or label == "" then label = entry.name end
+            if self.config.show_images then
+                local img = imgui.LoadImage(material_get_icon(entry.name))
+                if img then
+                    imgui.Image(img, img.width, img.height)
+                    imgui.SameLine()
+                end
             end
             -- TODO: Make text configurable on localization
-            imgui.Text(("%s [%s]"):format(label, entry.id))
+            if type(entry.uiname) ~= "string" then
+                imgui.Text(smallfolk.dumps(entry))
+            else
+                imgui.Text(("%s [%s]"):format(GameTextGet(entry.uiname), entry.name))
+            end
         end
         if to_remove ~= nil then
             table.remove(self.env.material_list, to_remove)
@@ -763,13 +869,12 @@ end
 
 function InfoPanel:_draw_entity_dropdown(imgui)
     if not self.env.entity_text then self.env.entity_text = "" end
-    local ret, text = false, self.env.entity_text
     imgui.SetNextItemWidth(400)
-    ret, text = imgui.InputText("Entity###entity_input", text)
-    if ret then self.env.entity_text = text end
+    _, self.env.entity_text = imgui.InputText("Entity###entity_input", self.env.entity_text)
     imgui.SameLine()
     if imgui.SmallButton("Done###entity_done") then
         self.env.manage_entities = false
+        self.env.entity_text = ""
     end
     imgui.SameLine()
     if imgui.SmallButton("Save###entity_save") then
@@ -781,7 +886,7 @@ function InfoPanel:_draw_entity_dropdown(imgui)
     _, self.env.entity_add_multi = imgui.Checkbox("Multi###entity_multi", self.env.entity_add_multi)
 
     if self.env.entity_text ~= "" then
-        local enttab = self:_get_entities()
+        local enttab = self:_get_entity_list()
         for _, entry in ipairs(enttab) do
             local ename = entry.name
             local epath = entry.path
@@ -806,10 +911,10 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                 if imgui.SmallButton("Add###add_" .. entry.name) then
                     if not self.env.entity_add_multi then self.env.entity_text = "" end
                     table.insert(self.env.entity_list, {
-                        id=entry.name,
-                        name=locname,
-                        path=entry.path,
-                        icon=entry.icon,
+                        id = entry.name,
+                        name = locname,
+                        path = entry.path,
+                        icon = entry.icon,
                     })
                 end
                 imgui.SameLine()
@@ -829,8 +934,7 @@ end
 
 function InfoPanel:_draw_entity_list(imgui)
     local to_remove = nil
-    local flags = bit.bor(
-        imgui.WindowFlags.HorizontalScrollbar)
+    local flags = imgui.WindowFlags.HorizontalScrollbar
     if imgui.BeginChild("Entity List###entity_list", 0, 0, true, flags) then
         for idx, entry in ipairs(self.env.entity_list) do
             if imgui.SmallButton("Remove###remove_" .. entry.id) then
@@ -861,6 +965,7 @@ end
 
 -- TODO
 function InfoPanel:_draw_item_dropdown(imgui)
+    imgui.Text("Item selection coming soon")
 end
 
 -- TODO
@@ -910,6 +1015,7 @@ function InfoPanel:draw(imgui)
         self.host:p(self.host.separator)
         for _, entry in ipairs(aggregate(self:_get_items())) do
             local name, entities = unpack(entry)
+            -- TODO: Determine and display item icon
             local line = ("%dx %s"):format(#entities, name)
             self.host:p(line)
 
@@ -933,11 +1039,15 @@ function InfoPanel:draw(imgui)
             end
         end
 
-        for _, entity in ipairs(self:_find_containers()) do
+        for _, entry in ipairs(self:_find_containers()) do
+            local contents = {}
+            for _, mat in ipairs(entry.rare_contents) do
+                table.insert(contents, GameTextGet(mat.uiname))
+            end
             self.host:p(("%s with %s detected nearby!!"):format(
-                entity.name, table.concat(entity.rare_contents, ", ")))
-            local ex, ey = EntityGetTransform(entity.entity)
-            self.host:d(("%s %d at {%d,%d}"):format(entity.name, entity.entity, ex, ey))
+                entry.name, table.concat(contents, ", ")))
+            local ex, ey = EntityGetTransform(entry.entity)
+            self.host:d(("%s %d at {%d,%d}"):format(entry.name, entry.entity, ex, ey))
         end
     end
 
@@ -945,10 +1055,23 @@ function InfoPanel:draw(imgui)
         self.host:p(self.host.separator)
         for _, entry in ipairs(aggregate(self:_get_enemies())) do
             local name, entities = unpack(entry)
-            self.host:p(("%dx %s"):format(#entities, name))
+            local first_entity = entities[1]
+            local entinfo = self:_get_entity_by_name(EntityGetName(first_entity))
+            local line = {("%dx"):format(#entities), {name}}
+            if entinfo and entinfo.icon then
+                line[2].image = entinfo.icon
+            end
+            self.host:p(line)
         end
 
         for _, entity in ipairs(self:_find_enemies()) do
+            if entity.icon and self.config.show_images then
+                local img = imgui.LoadImage(entity.icon)
+                if img then
+                    imgui.Image(img, img.width, img.height)
+                    imgui.SameLine()
+                end
+            end
             self.host:p(("%s detected nearby!!"):format(entity.name))
             local ex, ey = EntityGetTransform(entity.entity)
             self.host:d(("%s %d at {%d,%d}"):format(entity.name, entity.entity, ex, ey))

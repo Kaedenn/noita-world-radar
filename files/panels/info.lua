@@ -24,7 +24,7 @@ smallfolk = dofile_once("mods/world_radar/files/lib/smallfolk.lua")
 dofile_once("mods/world_radar/config.lua")
 -- luacheck: globals MOD_ID
 dofile_once("mods/world_radar/files/utility/biome.lua")
--- luacheck: globals biome_is_default biome_modifier_get
+-- luacheck: globals biome_is_default biome_is_common biome_modifier_get
 dofile_once("mods/world_radar/files/utility/entity.lua")
 -- luacheck: globals is_child_of entity_is_item entity_is_enemy item_get_name enemy_get_name get_name get_health entity_match get_with_tags distance_from
 dofile_once("mods/world_radar/files/utility/material.lua")
@@ -163,16 +163,24 @@ end
 
 --[[ Get biome information (name, path, modifier) for each biome ]]
 function InfoPanel:_get_biome_data()
-    local biome_xml = nxml.parse(self.funcs.ModTextFileGetContent("data/biome/_biomes_all.xml"))
+    local biomes_xml = nxml.parse(self.funcs.ModTextFileGetContent("data/biome/_biomes_all.xml"))
     local biomes = {}
-    for _, bdef in ipairs(biome_xml.children) do
+    for _, bdef in ipairs(biomes_xml.children) do
         local biome_path = bdef.attr.biome_filename
         local biome_name = biome_path:match("^data/biome/(.*).xml$")
+        local biome_uiname = BiomeGetValue(biome_path, "name")
+        if biome_uiname == "_EMPTY_" then
+            biome_uiname = biome_name
+        end
         local modifier = BiomeGetValue(biome_path, "mModifierUIDescription")
         local mod_data = biome_modifier_get(modifier) or {}
-        if not biome_is_default(biome_name, modifier) then
+        local show = true
+        if biome_is_default(biome_name, modifier) then show = false end
+        if biome_is_common(biome_name, modifier) then show = false end
+        if show then
             biomes[biome_name] = {
-                name = biome_name, -- TODO: reliably determine localized name
+                name = biome_name,
+                uiname = biome_uiname,
                 path = biome_path,
                 modifier = modifier,
                 probability = mod_data.probability or 0,
@@ -574,7 +582,7 @@ function InfoPanel:draw_menu(imgui)
         end
         if imgui.MenuItem("Toggle Images") then
             self.config.show_images = not self.config.show_images
-            ModSettingSet(MOD_ID .. ".show_images", self.config.show_images)
+            ModSettingSetNextValue(MOD_ID .. ".show_images", self.config.show_images, false)
         end
         imgui.EndMenu()
     end
@@ -1002,7 +1010,14 @@ function InfoPanel:draw(imgui)
     if self.env.list_biomes then
         --[[ Print all non-default biome modifiers ]]
         for bname, bdata in pairs(self.biomes) do
-            line = ("%s: %s (%0.1f)"):format(bdata.name, bdata.text, bdata.probability)
+            local biome_name = bdata.uiname or bdata.name or bname
+            if biome_name:match("^%$") then
+                biome_name = GameTextGet(biome_name)
+            end
+            if not biome_name:lower():match(bname) then
+                biome_name = ("%s [%s]"):format(biome_name, bname)
+            end
+            line = ("%s: %s (%0.1f)"):format(biome_name, bdata.text, bdata.probability)
             if bdata.probability < self.config.rare_biome_mod then
                 self.host:p({line, color="yellow"})
             else

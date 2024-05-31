@@ -30,6 +30,22 @@ function biome_is_default(biome_name, modifier)
     return false
 end
 
+--[[ True if the biome commonly has the given modifier ]]
+function biome_is_common(biome_name, modifier)
+    if modifier == nil or modifier == "" then return false end
+    local common_map = {
+        ["lake_statue"] = {"$biomemodifierdesc_moist"},
+    }
+    if common_map[biome_name] then
+        for _, mod in ipairs(common_map[biome_name]) do
+            if mod == modifier then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 --[[ Get a biome modifier by name ]]
 function biome_modifier_get(mod_name)
     -- luacheck: globals biome_modifiers

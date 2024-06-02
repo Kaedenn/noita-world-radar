@@ -50,14 +50,14 @@ mod_settings = {
             {
                 id = "show_images",
                 ui_name = "Show Images",
-                ui_description = "Show icons next to enemy and spell entries",
+                ui_description = "Show image next to spell, item, and enemy entries.",
                 value_default = true,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
             {
                 id = "color",
                 ui_name = "Color Display",
-                ui_description = "Draw text with colors?",
+                ui_description = "Adds color to the text displayed.",
                 value_default = true,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },

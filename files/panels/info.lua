@@ -448,8 +448,13 @@ function InfoPanel:_draw_onscreen_gui()
 
     for entid, ent_spells in pairs(self.env.wand_matches) do
         local spell_list = {}
-        for spell_name, _ in pairs(ent_spells) do
-            table.insert(spell_list, spell_name)
+        for spell_id, _ in pairs(ent_spells) do
+            local spell_name = spell_get_name(spell_id)
+            if spell_name then
+                table.insert(spell_list, GameTextGet(spell_name))
+            else
+                table.insert(spell_list, spell_name)
+            end
         end
         local spells = table.concat(spell_list, ", ")
         draw_text(("Wand with %s detected nearby!!"):format(spells))
@@ -457,7 +462,13 @@ function InfoPanel:_draw_onscreen_gui()
 
     for entid, _ in pairs(self.env.card_matches) do
         local spell = card_get_spell(entid)
-        draw_text(("Spell %s detected nearby!!"):format(spell))
+        local spell_name = spell_get_name(spell)
+        if spell_name then
+            spell_name = GameTextGet(spell_name)
+        else
+            spell_name = spell
+        end
+        draw_text(("Spell %s detected nearby!!"):format(spell_name))
     end
 
     GuiIdPop(gui)

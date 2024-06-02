@@ -2,6 +2,8 @@
 -- Spell-and-wand-related helper functions
 --]]
 
+local spell_cache = nil
+
 --[[ Get the spell for the given card ]]
 function card_get_spell(card)
     local action = EntityGetComponentIncludingDisabled(card, "ItemActionComponent")
@@ -22,6 +24,24 @@ function wand_get_spells(entity)
         end
     end
     return spells
+end
+
+--[[ Obtain the spell table for the given spell ID ]]
+function spell_get_data(spell)
+    if not spell_cache then
+        spell_cache = {}
+        dofile_once("data/scripts/gun/gun_actions.lua")
+        for _, entry in ipairs(actions) do
+            spell_cache[entry.id] = entry
+        end
+    end
+    return spell_cache[spell] or {}
+end
+
+--[[ Obtain the (unlocalized) name of the given spell ID ]]
+function spell_get_name(spell)
+    local action = spell_get_data(spell)
+    return action.name
 end
 
 -- vim: set ts=4 sts=4 sw=4:

@@ -30,8 +30,6 @@
 -- Panels are allowed to have whatever else they desire in their panel table.
 --]]
 
--- TODO: Allow for {image="<path>"} in Panel.lines
-
 -- luacheck: globals MOD_ID CONF conf_get conf_set
 
 dofile_once("data/scripts/lib/utilities.lua")
@@ -85,11 +83,7 @@ Panel.SAVE_KEY = MOD_ID .. "_current_panel"
 
 --[[ Built-in panels ]]
 PANELS_NATIVE = {
-    --dofile_once("mods/world_radar/files/panels/eval.lua"),
     dofile_once("mods/world_radar/files/panels/info.lua"),
-    --dofile_once("mods/world_radar/files/panels/summon.lua"),
-    --dofile_once("mods/world_radar/files/panels/radar.lua"),
-    --dofile_once("mods/world_radar/files/panels_old/progress.lua"),
 }
 
 --[[ Create the panel subsystem.

@@ -15,7 +15,9 @@
 dofile_once("data/scripts/lib/mod_settings.lua")
 
 dofile_once("mods/world_radar/config.lua")
+dofile_once("mods/world_radar/files/utility/material.lua")
 
+MaterialTables = {}
 KPanelLib = dofile("mods/world_radar/files/panel.lua")
 KPanel = nil
 imgui = nil
@@ -51,6 +53,11 @@ function _build_gui()
     end
 end
 
+--[[ See the Fungal Shift Query init.lua for why this is necessary ]]
+function OnBiomeConfigLoaded()
+    MaterialTables = generate_material_tables()
+end
+
 function OnModPostInit()
 end
 
@@ -71,7 +78,7 @@ function OnWorldPostUpdate()
         elseif not KPanel.init then
             GamePrint("Failed KPanel:new(); init not defined")
         elseif not KPanel.initialized then
-            KPanel:init(nil)
+            KPanel:init(nil, {["materials"]=MaterialTables})
             KPanel:set("info")
         end
 

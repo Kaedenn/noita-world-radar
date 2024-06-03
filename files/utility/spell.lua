@@ -31,6 +31,7 @@ function spell_get_data(spell)
     if not spell_cache then
         spell_cache = {}
         dofile_once("data/scripts/gun/gun_actions.lua")
+        -- luacheck: globals actions
         for _, entry in ipairs(actions) do
             spell_cache[entry.id] = entry
         end

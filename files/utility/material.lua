@@ -26,6 +26,34 @@ function container_get_contents(entity)
     return results
 end
 
+--[[ Easily obtain all of the materials ]]
+function generate_material_tables()
+    local tables = {
+        {"liquid", CellFactory_GetAllLiquids()},
+        {"sand", CellFactory_GetAllSands()},
+        {"gas", CellFactory_GetAllGases()},
+        {"fire", CellFactory_GetAllFires()},
+        {"solid", CellFactory_GetAllSolids()},
+    }
+    local result = {}
+    for _, table_pair in ipairs(tables) do
+        local tname, tentries = unpack(table_pair)
+        for _, mat in ipairs(tentries) do
+            local id = CellFactory_GetType(mat)
+            local uiname = CellFactory_GetUIName(id)
+            table.insert(result, {
+                kind = tname,
+                id = id,
+                name = mat,
+                uiname = uiname,
+                locname = GameTextGet(uiname),
+                icon = material_get_icon(mat),
+            })
+        end
+    end
+    return result
+end
+
 --[[ Get the (probable) path to the material icon ]]
 function material_get_icon(matname)
     return ("data/generated/material_icons/%s.png"):format(matname)

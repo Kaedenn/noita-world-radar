@@ -149,9 +149,9 @@ end
 --
 -- Must be called after Panel:new()
 --]]
-function Panel:init(env)
+function Panel:init(env, config)
     for pid, pobj in pairs(self.PANELS) do
-        local res, val = pcall(function() pobj:init(env, self) end)
+        local res, val = pcall(function() pobj:init(env, self, config) end)
         if not res then GamePrint(val) end
     end
     local curr_panel = GlobalsGetValue(Panel.SAVE_KEY)

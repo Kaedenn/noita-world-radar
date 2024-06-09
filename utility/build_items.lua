@@ -123,7 +123,7 @@ end
 local function include_xml_byname(file_path)
     local patterns = {
         "verlet", "placeholder", "hitfx", "aabb", "/custom_cards/",
-        "/_debug/", "/_[^/]*$",
+        "/_debug/", "/_[^/]*$", "/base_", "_base.xml",
     }
     for _, pattern in ipairs(patterns) do
         if file_path:find(pattern) then
@@ -244,6 +244,47 @@ local function expand_base_tags(xml, data_path)
     logger.trace("Result: %s", xml)
 end
 
+--[[ Build an item table from the given xml ]]
+local function build_item_entry(xml, filename)
+    local uiinfo = xml_lookup(xml, "UIInfoComponent")
+    local sprite = xml_lookup(xml, "SpriteComponent")
+    local item = xml_lookup(xml, "ItemComponent")
+    local phys_image = xml_lookup(xml, "PhysicsImageShapeComponent")
+    local ability = xml_lookup(xml, "AbilityComponent")
+    local function nonempty(value) return value and value ~= "" end
+
+    local id = filename:gsub("^.*%/", ""):gsub("%.xml$", "")
+    local name = id
+    if uiinfo and nonempty(uiinfo.attr.name) then
+        name = uiinfo.attr.name
+    elseif item and nonempty(item.attr.item_name) then
+        name = item.attr.item_name
+    elseif ability and nonempty(ability.attr.ui_name) then
+        name = ability.attr.ui_name
+    end
+
+    local function is_image(value)
+        if not nonempty(value) then return false end
+        return value:match("%.png$")
+    end
+
+    local icon = ""
+    if sprite and is_image(sprite.attr.image_file) then
+        icon = sprite.attr.image_file
+    elseif item and is_image(item.attr.ui_sprite) then
+        icon = item.attr.ui_sprite
+    elseif phys_image and is_image(phys_image.attr.image_file) then
+        icon = phys_image.attr.image_file
+    end
+
+    return {
+        id = id,
+        name = name,
+        path = filename,
+        icon = icon,
+    }
+end
+
 function main()
     local argv = parse_argv(arg)
 
@@ -267,6 +308,19 @@ function main()
         logger.debug("File: %s", name)
         logger.debug(tostring(root))
 
+        local filename = name
+        if filename:find(argv.data_path) then
+            filename = "data/" .. filename:sub(#argv.data_path)
+            filename = filename:gsub("[/]+", "/")
+        end
+        local item_entry = build_item_entry(root, filename)
+        if item_entry.icon == "" then
+            if icons[item_entry.id] then
+                item_entry.icon = icons[item_entry.id]
+            end
+        end
+        table.insert(itemlist, item_entry)
+
         ::continue::
     end
 
@@ -281,14 +335,8 @@ function main()
 return {
 ]]):format(self_name))
     for _, entry in ipairs(itemlist) do
-        local ipath, iname = unpack(entry)
-        local iid = string.match(ipath, "([^/]*)%.xml$")
-        local icon = icons[iid] or ""
-        if icon == "" then
-            icon = icons[iname:gsub("^[$][^_]+", "")] or ""
-        end
         ofile:write(([[  {id=%q, name=%q, path=%q, icon=%q},
-]]):format(iid, iname, ipath, icon))
+]]):format(entry.id, entry.name, entry.path, entry.icon))
     end
     ofile:write([[
 }

@@ -3,17 +3,12 @@ The "Info" Panel: Display interesting information
 
 TODO: Only display the primary biome of a biome group
 
-TODO: Display localized spell names, enemy names
-
-TODO: Implement item scanner selection and list, with icons
-
 TODO: Add "include all unknown spells" button
+TODO: Add "auto-remove found spells" button
 
 TODO: Add "show triggers" (eg. temple collapse) via barrier spell effect
 
 TODO: Allow user to configure where the on-screen text is displayed
-
-FIXME: Don't scan O(n) for get_entity_by_name, get_spell_by_name
 
 TODO: Maybe inhibit save/load/clear menus if there's nothing to save/load/clear
 --]]
@@ -28,9 +23,9 @@ dofile_once("mods/world_radar/files/utility/biome.lua")
 dofile_once("mods/world_radar/files/utility/entity.lua")
 -- luacheck: globals is_child_of entity_is_item entity_is_enemy item_get_name enemy_get_name get_name get_health entity_match get_with_tags distance_from
 dofile_once("mods/world_radar/files/utility/material.lua")
--- luacheck: globals container_get_contents material_get_icon
+-- luacheck: globals container_get_contents material_get_icon generate_material_tables
 dofile_once("mods/world_radar/files/utility/spell.lua")
--- luacheck: globals card_get_spell wand_get_spells
+-- luacheck: globals card_get_spell wand_get_spells spell_get_name
 
 --[[ Panel class with default values.
 --
@@ -74,6 +69,10 @@ InfoPanel = {
         gui = {
             pad_left = 10,
             pad_bottom = 2,
+        },
+        icons = {
+            width = 16,
+            height = 16,
         },
     },
     env = {
@@ -159,6 +158,25 @@ local function aggregate(entries)
         return lname < rname
     end)
     return results
+end
+
+--[[ Draw an image using imgui ]]
+function InfoPanel:_draw_image(imgui, path, rescale, end_line)
+    local img = imgui.LoadImage(path)
+    if img then
+        local width = img.width
+        local height = img.height
+        if rescale then
+            width = self.config.icons.width or img.width
+            height = self.config.icons.height or img.height
+        end
+        imgui.Image(img, width, height)
+        if not end_line then
+            imgui.SameLine()
+        end
+        return true
+    end
+    return false
 end
 
 --[[ Get biome information (name, path, modifier) for each biome ]]
@@ -772,11 +790,7 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                 end
                 imgui.SameLine()
                 if entry.icon and self.config.show_images then
-                    local img = imgui.LoadImage(entry.icon)
-                    if img then
-                        imgui.Image(img, img.width, img.height)
-                        imgui.SameLine()
-                    end
+                    self:_draw_image(imgui, entry.icon, true, false)
                 end
                 -- TODO: Make text configurable on localization
                 imgui.Text(("%s (%s)"):format(GameTextGet(entry.name), entry.id))
@@ -795,11 +809,7 @@ function InfoPanel:_draw_spell_list(imgui)
             end
             imgui.SameLine()
             if entry.icon and self.config.show_images then
-                local img = imgui.LoadImage(entry.icon)
-                if img then
-                    imgui.Image(img, img.width, img.height)
-                    imgui.SameLine()
-                end
+                self:_draw_image(imgui, entry.icon, true, false)
             end
             local label = entry.name
             if label:match("^[$]") then
@@ -878,29 +888,27 @@ function InfoPanel:_draw_material_dropdown(imgui)
                 end
             end
 
-            if add_me then
-                if imgui.SmallButton("Add###add_mat_" .. matname) then
-                    if not self.env.material_add_multi then self.env.material_text = "" end
-                    table.insert(self.env.material_list, {
-                        kind = kind,
-                        id = matid,
-                        name = matname,
-                        uiname = matuiname,
-                        locname = matlocname,
-                        icon = maticon,
-                    })
-                end
-                imgui.SameLine()
-                if maticon and maticon ~= "" and self.config.show_images then
-                    local img = imgui.LoadImage(maticon)
-                    if img then
-                        imgui.Image(img, img.width, img.height)
-                        imgui.SameLine()
-                    end
-                end
-                -- TODO: Make text configurable on localization
-                imgui.Text(("%s (%s)"):format(matlocname, matname))
+            if not add_me then
+                goto continue
             end
+
+            if imgui.SmallButton("Add###add_mat_" .. matname) then
+                if not self.env.material_add_multi then self.env.material_text = "" end
+                table.insert(self.env.material_list, {
+                    kind = kind,
+                    id = matid,
+                    name = matname,
+                    uiname = matuiname,
+                    locname = matlocname,
+                    icon = maticon,
+                })
+            end
+            imgui.SameLine()
+            if maticon and maticon ~= "" and self.config.show_images then
+                self:_draw_image(imgui, maticon, true, false)
+            end
+            -- TODO: Make text configurable on localization
+            imgui.Text(("%s (%s)"):format(matlocname, matname))
 
             ::continue::
         end
@@ -917,11 +925,7 @@ function InfoPanel:_draw_material_list(imgui)
             end
             imgui.SameLine()
             if entry.icon and entry.icon ~= "" and self.config.show_images then
-                local img = imgui.LoadImage(entry.icon)
-                if img then
-                    imgui.Image(img, img.width, img.height)
-                    imgui.SameLine()
-                end
+                self:_draw_image(imgui, entry.icon, true, false)
             end
             -- TODO: Make text configurable on localization
             if not entry.locname then
@@ -986,16 +990,10 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                 end
                 imgui.SameLine()
                 if self.config.show_images then
-                    local img = nil
-                    if entry.icon and entry.icon ~= "" then
-                        img = imgui.LoadImage(entry.icon)
-                    end
-                    if not img then
-                        img = imgui.LoadImage("data/ui_gfx/icon_unkown.png")
-                    end
-                    if img then
-                        imgui.Image(img, img.width, img.height)
-                        imgui.SameLine()
+                    local paths = {entry.icon, "data/ui_gfx/icon_unknown.png"}
+                    for _, path in ipairs(paths) do
+                        local result = self:_draw_image(imgui, path, true, false)
+                        if result then break end
                     end
                 end
                 -- TODO: Make text configurable on localization
@@ -1016,11 +1014,7 @@ function InfoPanel:_draw_entity_list(imgui)
             end
             imgui.SameLine()
             if entry.icon and self.config.show_images then
-                local img = imgui.LoadImage(entry.icon)
-                if img then
-                    imgui.Image(img, img.width, img.height)
-                    imgui.SameLine()
-                end
+                self:_draw_image(imgui, entry.icon, true, false)
             end
             local label = entry.name
             if label:match("^[$]") then
@@ -1087,11 +1081,7 @@ function InfoPanel:_draw_item_dropdown(imgui)
                 end
                 imgui.SameLine()
                 if entry.icon and entry.icon ~= "" and self.config.show_images then
-                    local img = imgui.LoadImage(entry.icon)
-                    if img then
-                        imgui.Image(img, img.width, img.height)
-                        imgui.SameLine()
-                    end
+                    self:_draw_image(imgui, entry.icon, true, false)
                 end
                 -- TODO: Make text configurable on localization
                 imgui.Text(("%s (%s)"):format(locname, entry.name))
@@ -1110,11 +1100,7 @@ function InfoPanel:_draw_item_list(imgui)
             end
             imgui.SameLine()
             if entry.icon and self.config.show_images then
-                local img = imgui.LoadImage(entry.icon)
-                if img then
-                    imgui.Image(img, img.width, img.height)
-                    imgui.SameLine()
-                end
+                self:_draw_image(imgui, entry.icon, true, false)
             end
             local label = entry.name
             if label:match("^[$]") then
@@ -1239,11 +1225,7 @@ function InfoPanel:draw(imgui)
 
         for _, entity in ipairs(self:_find_enemies()) do
             if entity.icon and self.config.show_images then
-                local img = imgui.LoadImage(entity.icon)
-                if img then
-                    imgui.Image(img, img.width, img.height)
-                    imgui.SameLine()
-                end
+                self:_draw_image(imgui, entity.icon, true, false)
             end
             self.host:p(("%s detected nearby!!"):format(entity.name))
             local ex, ey = EntityGetTransform(entity.entity)
@@ -1255,9 +1237,13 @@ function InfoPanel:draw(imgui)
         self:_find_spells()
         for entid, ent_spells in pairs(self.env.wand_matches) do
             local spell_list = {}
-            for spell_name, _ in pairs(ent_spells) do
-                -- TODO: Display localized spell name
-                table.insert(spell_list, spell_name)
+            for spell, _ in pairs(ent_spells) do
+                local spell_name = spell_get_name(spell)
+                if spell_name:match("^%$") then
+                    spell_name = GameTextGet(spell_name)
+                end
+                local name = ("%s [%s]"):format(spell_name, spell)
+                table.insert(spell_list, name)
             end
             local spells = table.concat(spell_list, ", ")
             self.host:p(("Wand with %s detected nearby!!"):format(spells))
@@ -1270,12 +1256,16 @@ function InfoPanel:draw(imgui)
 
         for entid, _ in pairs(self.env.card_matches) do
             local spell = card_get_spell(entid)
-            -- TODO: Display localized spell name
-            self.host:p(("Spell %s detected nearby!!"):format(spell))
+            local spell_name = spell_get_name(spell)
+            if spell_name:match("^%$") then
+                spell_name = GameTextGet(spell_name)
+            end
+            local name = ("%s [%s]"):format(spell_name, spell)
+            self.host:p(("Spell %s detected nearby!!"):format(name))
             local wx, wy = EntityGetTransform(entid)
             if wx ~= nil and wy ~= nil and wx ~= 0 and wy ~= 0 then
                 local pos_str = ("%d, %d"):format(wx, wy)
-                self.host:d(("Spell %d at %s with %s"):format(entid, pos_str, spell))
+                self.host:d(("Spell %d at %s with %s"):format(entid, pos_str, name))
             end
         end
     end

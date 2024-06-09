@@ -24,12 +24,11 @@ package.path = package.path .. ";" .. table.concat({
 }, ";")
 
 io = require 'io'
-ffi = require 'ffi'
 
-require 'filesystem'
-kae = require 'libkae'
+require 'lib.filesystem' -- exports minifs
+kae = require 'lib.libkae'
+logger = require 'lib.logging'
 nxml = require 'nxml'
-minifs = require 'minifs'
 
 --[[ Parse program arguments ]]
 function parse_argv(argv)
@@ -79,6 +78,10 @@ options:
         error("Missing required argument data_path")
     end
 
+    if args.verbose then
+        logger.level = logger.DEBUG
+    end
+
     return args
 end
 
@@ -95,22 +98,10 @@ end
 function main()
     local argv = parse_argv(arg)
 
-    local function pdebug(message)
-        if argv.verbose then
-            io.stderr:write("DEBUG: ")
-            io.stderr:write(message)
-            if ffi.os == "Windows" then
-                io.stderr:write("\r\n")
-            else
-                io.stderr:write("\n")
-            end
-        end
-    end
-
     local data = table.concat({
         argv.data_path, "entities", "animals"
     }, minifs.PATH_SEPARATOR)
-    pdebug("Searching for xml files in " .. data)
+    logger.debug("Searching for xml files in " .. data)
 
     local icons = {}
     for name in minifs.listdir(argv.data_path .. "/ui_gfx/animal_icons") do
@@ -121,7 +112,7 @@ function main()
 
     local entlist = {}
     for _, name in ipairs(find_with_extension(data, "xml")) do
-        pdebug("Reading XML file " .. name)
+        logger.debug("Reading XML file " .. name)
         local root = nxml.parse(read_file(name))
         if root.name == "Entity" and root.attr.name then
             local ename = root.attr.name
@@ -131,19 +122,19 @@ function main()
             end
 
             if fpath:match("/illusions/") then
-                pdebug(("File %s at %q defines illusory entity %q; skipping"):format(
-                    fpath, name, ename))
+                logger.debug("File %s at %q defines illusory entity %q; skipping",
+                    fpath, name, ename)
             elseif ename:match("^[$]animal_") then
-                pdebug(("File %s at %q defines entity %q"):format(fpath, name, ename))
+                logger.debug("File %s at %q defines entity %q", fpath, name, ename)
                 table.insert(entlist, {fpath, ename})
             else
-                pdebug(("File %s at %q defines non-entity %q; skipping"):format(
-                    fpath, name, ename))
+                logger.debug("File %s at %q defines non-entity %q; skipping",
+                    fpath, name, ename)
             end
         end
     end
 
-    io.stderr:write(("Found %d entities in %s\n"):format(#entlist, argv.data_path))
+    logger.info("Found %d entities in %s", #entlist, argv.data_path)
 
     local ofile = io.stdout
     if argv.output ~= "-" then

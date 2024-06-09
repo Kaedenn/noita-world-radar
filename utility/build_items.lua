@@ -13,6 +13,21 @@
 -- 
 -- FILE defaults to items.lua. Pass "-o -" to write to stdout.
 --
+-- The <Base> tag is complicated.
+--
+-- This tag causes the content of the referenced xml file to be merged
+-- into the original xml file. The nodes are merged and not appended;
+-- the following rules apply:
+--  Original: <Component attr1="a" attr2="b" />
+--  Base: <Component attr2="c" attr3="d" />
+--  Result: <Component attr1="a" attr2="c" attr3="d" />
+-- Tags and attributes in the original file override the tags and
+-- attributes of the referenced base file.
+--
+-- The nth child node overwrites the nth base node with that tag.
+--
+-- Child nodes can have _remove_from_base="1" which removes that node
+-- from the base entirely.
 --]]
 
 local self_name = arg[0]:gsub(".*\\/", "")
@@ -24,18 +39,18 @@ package.path = package.path .. ";" .. table.concat({
 }, ";")
 
 io = require 'io'
-ffi = require 'ffi'
 
-require 'filesystem'
-kae = require 'libkae'
+require 'lib.filesystem' -- exports minifs
+kae = require 'lib.libkae'
+logger = require 'lib.logging'
 nxml = require 'nxml'
-minifs = require 'minifs'
 
 --[[ Parse program arguments ]]
 function parse_argv(argv)
     if not argv then argv = arg end
     local args = {
         verbose = false,
+        trace = false,
         data_path = nil,
         output = "items.lua",
     }
@@ -56,6 +71,8 @@ function parse_argv(argv)
             skip_next = true
         elseif optv == "-v" or optv == "--verbose" then
             args.verbose = true
+        elseif optv == "-t" or optv == "--trace" then
+            args.trace = true
         elseif optv == "-h" or optv == "--help" then
             print(([[
 usage: %s [-h] [-v] [-o FILE] DATA_PATH
@@ -66,6 +83,7 @@ arguments:
 options:
     -h, --help              print this message and exit
     -v, --verbose           enable verbose diagnostics
+    -t, --trace             enable very verbose diagnostics
     -o FILE, --output FILE  write results to FILE (default %q)
 ]]):format(argv[0], args.output))
             os.exit(0)
@@ -77,6 +95,14 @@ options:
 
     if not args.data_path then
         error("Missing required argument data_path")
+    end
+
+    if args.trace then
+        logger.level = logger.TRACE
+    elseif args.verbose then
+        logger.level = logger.DEBUG
+    else
+        logger.level = logger.INFO
     end
 
     return args
@@ -120,11 +146,15 @@ local function include_xml_bycontent(file_text)
     return false
 end
 
---[[ Obtain the first child having the given name ]]
-local function xml_lookup(root, name)
+--[[ Obtain the nth child having the given name (default first) ]]
+local function xml_lookup(root, name, nth)
+    local curr_nth = 1
     for index, elem in ipairs(root.children) do
         if elem.name == name then
-            return elem, index
+            if nth == nil or nth == curr_nth then
+                return elem, index
+            end
+            curr_nth = curr_nth + 1
         end
     end
     return nil, 0
@@ -153,52 +183,74 @@ local function xml_delete(parent, name, move_children, recurse)
     return true, ""
 end
 
+--[[ Merge a single element into the specified tree at the given location ]]
+local function merge_element(new_elem, referenced_elem)
+    for attr_name, attr_value in pairs(referenced_elem.attr) do
+        if not new_elem.attr[attr_name] then
+            new_elem.attr[attr_name] = attr_value
+        end
+    end
+end
+
+--[[ Merge the content of the base file into the child tree ]]
+local function merge_xml(parent, referenced)
+    local index = 1
+    local nth_table = {}
+    for _, elem in ipairs(referenced.children) do
+        if not nth_table[elem.name] then nth_table[elem.name] = 0 end
+        nth_table[elem.name] = nth_table[elem.name] + 1
+        local base = xml_lookup(parent, elem.name, nth_table[elem.name])
+        if base then
+            merge_element(base, elem)
+            if #elem.children > 0 then
+                merge_xml(base, elem)
+            end
+        else
+            table.insert(parent.children, index, elem)
+            index = index + 1
+        end
+    end
+
+    --[[ TODO
+    local to_remove = {}
+    for idx, elem in ipairs(parent.children) do
+        if elem.attr._remove_from_base == "1" then
+            table.insert(to_remove, 1, idx)
+        end
+    end
+    for _, idx in ipairs(to_remove) do
+        table.remove(parent.children, idx)
+    end
+    ]]
+end
+
 --[[ Expand any <Base name="..."> tags in the xml ]]
 local function expand_base_tags(xml, data_path)
     local base_tag, base_index = xml_lookup(xml, "Base")
     if not base_tag then return end
 
     local parent_path = base_tag.attr.file:gsub("^data%/", data_path .. "/")
-    parent_path = parent_path:gsub("%/%/", "/")
-    io.stderr:write(("Expanding %s to %s\n"):format(base_tag.attr.file, parent_path))
-
-    io.stderr:write(tostring(xml) .. "\n")
+    parent_path = parent_path:gsub("[%/]+", "/")
+    logger.trace("Expanding %s to %s", base_tag.attr.file, parent_path)
+    local root_xml = nxml.parse(read_file(parent_path))
+    logger.trace("Merging %s", root_xml)
+    logger.trace("Into %s", xml)
+    merge_xml(base_tag, root_xml)
     xml_delete(xml, "Base", true, true)
 
-    -- Now load base xml file and merge its contents
-    local root_xml = nxml.parse(read_file(parent_path))
-    io.stderr:write(("Inserting %d elements at index %d\n"):format(#root_xml.children, base_index))
-    io.stderr:write("Merging ")
-    io.stderr:write(tostring(root_xml) .. "\n")
-    for _, node in ipairs(root_xml.children) do
-        table.insert(xml.children, base_index, node)
+    for _, elem in ipairs(xml.children) do
+        expand_base_tags(elem, data_path)
     end
-    io.stderr:write("Into ")
-    io.stderr:write(tostring(xml) .. "\n\n")
-    expand_base_tags(xml, data_path)
-    io.stderr:write("Result: ")
-    io.stderr:write(tostring(xml) .. "\n\n")
+    logger.trace("Result: %s", xml)
 end
 
 function main()
     local argv = parse_argv(arg)
 
-    local function pdebug(message)
-        if argv.verbose then
-            io.stderr:write("DEBUG: ")
-            io.stderr:write(message)
-            if ffi.os == "Windows" then
-                io.stderr:write("\r\n")
-            else
-                io.stderr:write("\n")
-            end
-        end
-    end
-
     local data = table.concat({
         argv.data_path, "entities"
     }, minifs.PATH_SEPARATOR)
-    pdebug("Searching for xml files in " .. data)
+    logger.debug("Searching for xml files in " .. data)
 
     local icons = get_item_icons(argv.data_path)
 
@@ -207,16 +259,18 @@ function main()
         if not include_xml_byname(name) then goto continue end
         local content = read_file(name)
         if not include_xml_bycontent(content) then goto continue end
-        pdebug("Reading XML file " .. name)
+        logger.debug("Reading XML file " .. name)
         local root = nxml.parse(content)
         if root.name ~= "Entity" then goto continue end
 
         expand_base_tags(root, argv.data_path)
+        logger.debug("File: %s", name)
+        logger.debug(tostring(root))
 
         ::continue::
     end
 
-    io.stderr:write(("Found %d items in %s\n"):format(#itemlist, argv.data_path))
+    logger.debug("Found %d items in %s", #itemlist, argv.data_path)
 
     local ofile = io.stdout
     if argv.output ~= "-" then

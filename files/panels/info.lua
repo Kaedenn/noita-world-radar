@@ -559,8 +559,8 @@ function InfoPanel:_init_tables()
         end
         if #data > 0 then
             self.env[var] = data
-            self.host:print(("Loaded %d %s from %s table"):format(
-                #self.env[var], name, from_table))
+            self.host:print(("Loaded %d %s from %s %s table"):format(
+                #self.env[var], name, from_table, var))
         end
     end
 end

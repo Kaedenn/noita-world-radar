@@ -37,5 +37,12 @@ function read_lines(path)
     return lines
 end
 
+--[[ Join two or more path components together ]]
+function join_path(stem, ...)
+    local result = table.concat({stem, ...}, minifs.PATH_SEPARATOR)
+    local escaped_pat = ("[%%%s]+"):format(minifs.PATH_SEPARATOR)
+    print(escaped_pat)
+    return result:gsub(escaped_pat, minifs.PATH_SEPARATOR)
+end
 
 -- vim: set ts=4 sts=4 sw=4:

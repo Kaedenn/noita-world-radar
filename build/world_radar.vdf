@@ -5,6 +5,6 @@
     "previewfile"     "/home/kaedenn/.local/share/Steam/steamapps/common/Noita/mods/world_radar/workshop_preview_image.png"
     "visibility"      "0" // 0=public, 1=friends only, 2=private
     "title"           "World Information Scanner"
-    "description"     "Mod description coming soon"
-    "publishedfileid" ""
+    "description"     ""
+    "publishedfileid" "3264737766"
 }

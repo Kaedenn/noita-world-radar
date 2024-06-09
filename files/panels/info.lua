@@ -241,7 +241,7 @@ function InfoPanel:_get_entity_list()
     return self.env.entity_cache
 end
 
---[[ Get all of the known items (TODO) ]]
+--[[ Get all of the known items ]]
 function InfoPanel:_get_item_list()
     --[[{
     --  id = "treasure_chest",
@@ -250,8 +250,7 @@ function InfoPanel:_get_item_list()
     --  icon = "data/buildings_gfx/chest_random.png",
     --}]]
     if not self.env.item_cache or #self.env.item_cache == 0 then
-        self.env.item_cache = {}
-        --self.env.item_cache = dofile("mods/world_radar/files/generated/item_list.lua")
+        self.env.item_cache = dofile("mods/world_radar/files/generated/item_list.lua")
     end
     return self.env.item_cache
 end

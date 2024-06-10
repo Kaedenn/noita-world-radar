@@ -1,0 +1,45 @@
+"I need a teleport bolt." "Are there Greater Treasure Chests nearby?" "Are there rare enemies nearby?" "Is there a flask of Healthium nearby?"
+
+This mod is the ultimate radar scanner for all things entity: spells, enemies, materials, and items. It will alert you if it finds something interesting nearby. With debug mode enabled, it'll even tell you where it is.
+
+This mod does require Noita-Dear-ImGui, which you can obtain here:
+https://github.com/dextercd/Noita-Dear-ImGui/releases
+Note that Noita-Dear-ImGui must be *above* this mod in the load order.
+
+The UI includes the following key features:
+* A list of all biome modifiers currently active and which biome(s) are affected.
+* A list of all items nearby.
+* A list of all enemies nearby.
+* The ability to configure the spell search list.
+* The ability to configure the enemy search list.
+* The ability to configure the material (flask or pouch contents) search list.
+* The ability to configure the item search list.
+
+There are three levels of configuration:
+1. Default lists: this mod comes pre-bundled with appropriate pre-selected entries for enemies, materials, and items. See below for the exact lists.
+2. Per-run lists: changes to the lists are saved per-run. If you start a new run, these changes are lost.
+3. Persistent lists: changes can be saved forever so that they're loaded at the start of every run.
+
+Planned features are as follows:
+* Option to add all spells you have yet to unlock to the search list.
+* Option to automatically remove spells from the search list as you pick them up.
+
+This mod is how I found my first ever Greater Treasure Chest and my latest Healthium flask.
+
+Material default list:
+creepy_liquid
+magic_liquid_hp_regeneration (Healthium)
+magic_liquid_weakness (Diminution)
+urine
+
+Enemy default list:
+$animal_worm_big (The giant worm that sometimes drops health increases)
+$animal_chest_leggy (The rare leggy chest mimic)
+$animal_dark_alchemist (The rare heart mimic)
+$animal_mimic_potion (New potion mimic)
+$animal_playerghost (Wand ghosts)
+$animal_shaman_wind (The very rare spell refresh mimic)
+
+Item default list:
+$item_chest_treasure_super (Greater Treasure Chest)
+$item_greed_die (Greed Die; the exceedingly-rare one)

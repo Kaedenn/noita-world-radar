@@ -220,15 +220,16 @@ archive_is_unique() { # path file
 
 # Check if we should skip deploying the given object
 deploy_check_skip() { # path
-  if [[ $1 == build ]]; then return 0; fi
-  if [[ $1 =~ build/.* ]]; then return 0; fi
+  if [[ "$1" == build ]]; then return 0; fi
+  if [[ "$1" =~ build/.* ]]; then return 0; fi
+  if git check-ignore -q "$1"; then return 0; fi
   return 1
 }
 
 # Copy the files in the current repo to the dest directory
 deploy() { # dest
   local dest="$1"
-  git ls-tree -r --name-only $(git branch --show-current) | while read entry; do
+  git ls-tree -r --name-only $(get_branch) | while read entry; do
     deploy_check_skip $entry && continue
     local dpath="$(dirname "$entry")"
     info "Replicating $entry to $dest/$entry"
@@ -263,7 +264,6 @@ else
 fi
 
 if [[ "$ACTION" == "cp" ]]; then
-
   # Should we create a backup of the deployed directory?
   if [[ -n "${BACKUP:-}" ]]; then
     BKFILE="$BACKUP/$MOD_NAME-$(date +%Y%m%d-%H%M%S).tar.gz"
@@ -275,8 +275,8 @@ if [[ "$ACTION" == "cp" ]]; then
     fi
   fi
 
-  info "Copying . to $DEST_DIR"
   # Deploy this mod to the destination directory
+  info "Copying . to $DEST_DIR"
   if [[ -d "$DEST_DIR" ]]; then
     dry checked rm -r "$DEST_DIR"
   fi
@@ -286,7 +286,6 @@ if [[ "$ACTION" == "cp" ]]; then
       info "Done"
     fi
   fi
-
 else
   info "Execute '$0 [ARGS...] cp' to deploy $MOD_NAME"
 fi

@@ -71,8 +71,8 @@ InfoPanel = {
             pad_bottom = 2,
         },
         icons = {
-            width = 16,
-            height = 16,
+            width = 20,
+            height = 20,
         },
     },
     env = {
@@ -161,16 +161,36 @@ local function aggregate(entries)
 end
 
 --[[ Draw an image using imgui ]]
-function InfoPanel:_draw_image(imgui, path, rescale, end_line)
+function InfoPanel:_draw_image(imgui, image, rescale, end_line)
+    local path = image
+    local width, height = 0, 0
+    local uvx, uvy = 0, 0
+    local frame_width, frame_height = nil, nil
+    if type(image) == "table" then
+        path = image.path
+        width = image.width or 0
+        height = image.height or 0
+        frame_width = image.frame_width
+        frame_height = image.frame_height
+    end
+    if path == "" or type(path) ~= "string" then
+        return false
+    end
     local img = imgui.LoadImage(path)
     if img then
-        local width = img.width
-        local height = img.height
+        if frame_width then uvx = frame_width / img.width end
+        if frame_height then uvy = frame_height / img.height end
+        if width == 0 then width = img.width end
+        if height == 0 then height = img.height end
         if rescale then
             width = self.config.icons.width or img.width
             height = self.config.icons.height or img.height
         end
-        imgui.Image(img, width, height)
+        if uvx ~= 0 or uvy ~= 0 then
+            imgui.Image(img, width, height, 0, 0, uvx, uvy)
+        else
+            imgui.Image(img, width, height)
+        end
         if not end_line then
             imgui.SameLine()
         end
@@ -904,7 +924,7 @@ function InfoPanel:_draw_material_dropdown(imgui)
                 })
             end
             imgui.SameLine()
-            if maticon and maticon ~= "" and self.config.show_images then
+            if maticon and self.config.show_images then
                 self:_draw_image(imgui, maticon, true, false)
             end
             -- TODO: Make text configurable on localization
@@ -924,7 +944,7 @@ function InfoPanel:_draw_material_list(imgui)
                 to_remove = idx
             end
             imgui.SameLine()
-            if entry.icon and entry.icon ~= "" and self.config.show_images then
+            if entry.icon and self.config.show_images then
                 self:_draw_image(imgui, entry.icon, true, false)
             end
             -- TODO: Make text configurable on localization
@@ -1054,6 +1074,7 @@ function InfoPanel:_draw_item_dropdown(imgui)
         for _, entry in ipairs(itemtab) do
             local add_me = false
             local locname = GameTextGet(entry.name)
+            if not locname or locname == "" then locname = entry.name end
             if entry.name:match(self.env.item_text) then
                 add_me = true
             elseif entry.path:match(self.env.item_text) then
@@ -1077,14 +1098,15 @@ function InfoPanel:_draw_item_dropdown(imgui)
                         name = entry.name,
                         path = entry.path,
                         icon = entry.icon,
+                        tags = entry.tags,
                     })
                 end
                 imgui.SameLine()
-                if entry.icon and entry.icon ~= "" and self.config.show_images then
+                if entry.icon and self.config.show_images then
                     self:_draw_image(imgui, entry.icon, true, false)
                 end
                 -- TODO: Make text configurable on localization
-                imgui.Text(("%s (%s)"):format(locname, entry.name))
+                imgui.Text(("%s [%s]"):format(locname, entry.id))
             end
         end
     end

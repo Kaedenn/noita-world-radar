@@ -35,6 +35,7 @@ function parse_argv(argv)
     if not argv then argv = arg end
     local args = {
         verbose = false,
+        trace = false,
         data_path = nil,
         output = "entities.lua",
     }
@@ -55,6 +56,8 @@ function parse_argv(argv)
             skip_next = true
         elseif optv == "-v" or optv == "--verbose" then
             args.verbose = true
+        elseif optv == "-t" or optv == "--trace" then
+            args.trace = true
         elseif optv == "-h" or optv == "--help" then
             print(([[
 usage: %s [-h] [-v] [-o FILE] DATA_PATH
@@ -65,6 +68,7 @@ arguments:
 options:
     -h, --help              print this message and exit
     -v, --verbose           enable verbose diagnostics
+    -t, --trace             enable very verbose diagnostics
     -o FILE, --output FILE  write results to FILE (default %q)
 ]]):format(argv[0], args.output))
             os.exit(0)
@@ -78,8 +82,12 @@ options:
         error("Missing required argument data_path")
     end
 
-    if args.verbose then
+    if args.trace then
+        logger.level = logger.TRACE
+    elseif args.verbose then
         logger.level = logger.DEBUG
+    else
+        logger.level = logger.INFO
     end
 
     return args
@@ -160,6 +168,9 @@ return {
     if argv.output ~= "-" then
         ofile:close()
     end
+
+    logger.info("Wrote %d entities to %s", #entlist,
+        argv.output == "-" and "<stdout>" or argv.output)
 
     return 0
 end

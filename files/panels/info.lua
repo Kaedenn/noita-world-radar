@@ -52,18 +52,18 @@ InfoPanel = {
         rare_materials = { -- Default rare material list
             "creepy_liquid",
             "magic_liquid_hp_regeneration", -- Healthium
-            "magic_liquid_weakness", -- Diminution
+            "magic_liquid_weakness",        -- Diminution
             --"purifying_powder",
             "urine",
         },
         rare_entities = { -- Default rare entity list
             "$animal_worm_big",
-            --"$animal_wizard_hearty", -- Heart mage; available if desired
+            --"$animal_wizard_hearty",  -- Heart mage; available if desired
             "$animal_chest_leggy",
-            "$animal_dark_alchemist", -- Pahan muisto; heart mimic
+            "$animal_dark_alchemist",   -- Pahan muisto; heart mimic
             "$animal_mimic_potion",
             "$animal_playerghost",
-            "$animal_shaman_wind", -- Valhe; spell refresh mimic
+            "$animal_shaman_wind",      -- Valhe; spell refresh mimic
         },
         rare_items = { -- Default rare item list
             "$item_chest_treasure_super",
@@ -100,7 +100,7 @@ InfoPanel = {
         -- entity_cache:table = nil
 
         -- spell_list = {{id=string, name=string, icon=string}}
-        -- material_list = {{id=string, name=string, type=string}}
+        -- material_list = {{[kind] [id] [name] [uiname] [locname] [icon] [tags]}}
         -- entity_list = {{id=string, name=string, path=string, icon=string}}
         -- item_list = {{id=string, name=string, icon=string}}
         -- wand_matches = {{entid={spell_name}}}
@@ -123,9 +123,6 @@ InfoPanel = {
         {"Spells", "find_spells", true},
         {"On-screen", "onscreen", true},
     },
-
-    -- For debugging, provide access to the local functions
-    _private_funcs = {},
 }
 
 --[[ True if the given table is truly empty ]]
@@ -622,6 +619,8 @@ function InfoPanel:init(environ, host, config)
         end
     end
 
+    -- TODO: Perform any table upgrades
+
     self.biomes = self:_get_biome_data()
     self.gui = GuiCreate()
 
@@ -632,11 +631,11 @@ function InfoPanel:init(environ, host, config)
     self.env.manage_items = false
 
     self.env.material_cache = nil
-    self.env.material_liquid = true
-    self.env.material_sand = true
-    self.env.material_gas = false
-    self.env.material_fire = false
-    self.env.material_solid = false
+    self.env.material_liquid = true     -- Show liquids
+    self.env.material_sand = true       -- Show sands
+    self.env.material_gas = false       -- Hide gasses
+    self.env.material_fire = false      -- Hide fires
+    self.env.material_solid = false     -- Hide solids
     self.env.entity_cache = nil
 
     self.env.spell_list = {}
@@ -692,6 +691,10 @@ function InfoPanel:draw_menu(imgui)
             if imgui.MenuItem(text) then
                 ModSettingSetNextValue(conf, not curr, false)
             end
+        end
+        imgui.Separator()
+        if imgui.MenuItem("Toggle Internal Debugging") then
+            self.env.do_debug = not self.env.do_debug
         end
         imgui.EndMenu()
     end
@@ -771,7 +774,93 @@ function InfoPanel:_draw_checkboxes(imgui)
     end
 end
 
+--[[ Draw a hover tooltip
+--
+-- If content is a function, then it is called as content(imgui, self)
+--]]
+function InfoPanel:_draw_hover_tooltip(imgui, content)
+    if imgui.IsItemHovered() then
+        if imgui.BeginTooltip() then
+            imgui.PushTextWrapPos(400)
+            if type(content) == "string" then
+                imgui.Text(content)
+            elseif type(content) == "function" then
+                content(imgui, self)
+            end
+            imgui.PopTextWrapPos()
+            imgui.EndTooltip()
+        end
+    end
+end
+
+--[[ Create a function that draws the hover tooltip for a material ]]
+function InfoPanel:_make_material_tooltip_func(entry)
+    return function(imgui, self_)
+        local kind = entry.kind
+        local matid = entry.id
+        local matname = entry.name
+        local matuiname = entry.uiname
+        local mattags = entry.tags or {""}
+        imgui.Text(("%s (ID: %s, type %s)"):format(matname, matid, kind))
+        imgui.Text(("UI Name: %s"):format(matuiname))
+        imgui.Text(("Tags: %s"):format(table.concat(mattags, " ")))
+    end
+end
+
+--[[ Draw the various inputs common to the dropdown functions
+--
+-- config.label         one of "Spell", "Material", etc
+-- config.var_prefix    one of "spell", "material", etc
+-- config.var_manage    one of "manage_spells", "manage_materials", etc
+-- config.hover_text    optional text to display on text input hover
+--]]
+function InfoPanel:_draw_dropdown_inputs(imgui, config)
+    local var_prefix = config.var_prefix or error("Missing var_prefix")
+    local var_manage = config.var_manage or error("Missing var_manage")
+
+    local var_add_multi = var_prefix .. "_add_multi"
+    local var_list = var_prefix .. "_list"
+    local var_text = var_prefix .. "_text"
+    if not self.env[var_text] then self.env[var_text] = "" end
+    imgui.SetNextItemWidth(400)
+    _, self.env[var_text] = imgui.InputText(
+        ("%s###%s_input"):format(config.label, var_prefix),
+        self.env[var_text])
+    if config.hover_text then
+        self:_draw_hover_tooltip(imgui, config.hover_text)
+    end
+    imgui.SameLine()
+    if imgui.SmallButton(("Done###%s_done"):format(var_prefix)) then
+        self.env[var_manage] = false
+        self.env[var_text] = ""
+    end
+    imgui.SameLine()
+    if imgui.SmallButton(("Save###%s_save"):format(var_prefix)) then
+        local data = smallfolk.dumps(self.env[var_list])
+        self.host:set_var(self.id, var_list, data)
+        self.env[var_manage] = false
+        self.env[var_text] = ""
+    end
+    self:_draw_hover_tooltip(imgui, "Save entries to the 'This Run' list")
+    imgui.SameLine()
+    _, self.env[var_add_multi] = imgui.Checkbox(
+        ("Multi###%s"):format(var_add_multi),
+        self.env[var_add_multi])
+    self:_draw_hover_tooltip(imgui, "Add multiple entries at a time")
+
+    if self.env.do_debug then
+        imgui.Text(("self.env.%s = %q"):format(var_text, self.env[var_text]))
+    end
+end
+
 function InfoPanel:_draw_spell_dropdown(imgui)
+    self:_draw_dropdown_inputs(imgui, {
+        label = "Spell",
+        var_prefix = "spell",
+        var_manage = "manage_spells",
+        hover_text = "Spell name or internal ID",
+    })
+    --[[
     if not self.env.spell_text then self.env.spell_text = "" end
     imgui.SetNextItemWidth(400)
     _, self.env.spell_text = imgui.InputText("Spell###spell_input", self.env.spell_text)
@@ -786,11 +875,26 @@ function InfoPanel:_draw_spell_dropdown(imgui)
         self.host:set_var(self.id, "spell_list", data)
         self.env.manage_spells = false
     end
+    if imgui.IsItemHovered() then
+        if imgui.BeginTooltip() then
+            imgui.PushTextWrapPos(400)
+            imgui.Text("Save the current list to the 'This Run' list")
+            imgui.PopTextWrapPos()
+            imgui.EndTooltip()
+        end
+    end
     imgui.SameLine()
     _, self.env.spell_add_multi = imgui.Checkbox("Multi###spell_multi", self.env.spell_add_multi)
+    ]]
 
     if self.env.spell_text ~= "" then
+        local match_upper = self.env.spell_text:gsub("[^a-zA-Z0-9_]", ""):upper()
+        local match_lower = self.env.spell_text:gsub("[^a-zA-Z0-9_]", ""):lower()
         local spell_list = self:_get_spell_list()
+        if self.env.do_debug then
+            imgui.Text(("match_upper: %q"):format(match_upper))
+            imgui.Text(("match_lower: %q"):format(match_lower))
+        end
         for _, spell_entry in ipairs(spell_list) do
             local entry = {
                 id = spell_entry.id,
@@ -798,14 +902,14 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                 icon = spell_entry.sprite
             }
             local add_me = false
-            if entry.id:match(self.env.spell_text:upper()) then
+            if entry.id:match(match_upper) then
                 add_me = true
-            elseif entry.name:lower():match(self.env.spell_text:lower()) then
+            elseif entry.name:lower():match(match_lower) then
                 add_me = true
             end
             local locname = GameTextGet(entry.name)
             if locname and locname ~= "" then
-                if locname:lower():match(self.env.spell_text:lower()) then
+                if locname:lower():match(match_lower) then
                     add_me = true
                 end
             end
@@ -824,7 +928,8 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                 if entry.icon and self.config.show_images then
                     self:_draw_image(imgui, entry.icon, true, false)
                 end
-                imgui.Text(("%s (%s)"):format(GameTextGet(entry.name), entry.id))
+                if not locname or locname == "" then locname = entry.name end
+                imgui.Text(("%s (%s)"):format(locname, entry.id))
             end
         end
     end
@@ -857,6 +962,18 @@ function InfoPanel:_draw_spell_list(imgui)
 end
 
 function InfoPanel:_draw_material_dropdown(imgui)
+    self:_draw_dropdown_inputs(imgui, {
+        label = "Material",
+        var_prefix = "material",
+        var_manage = "manage_materials",
+        hover_text = function(imgui_, self_)
+            imgui_.Text("Material name, internal ID, or tag")
+            imgui_.Text("To match against tags, enter the tag in brackets like so:")
+            imgui_.Text("[water]")
+            imgui_.Text("This will match all materials with the 'water' tag")
+        end,
+    })
+    --[[
     if not self.env.material_text then self.env.material_text = "" end
     imgui.SetNextItemWidth(400)
     _, self.env.material_text = imgui.InputText("Material###material_input", self.env.material_text)
@@ -871,9 +988,17 @@ function InfoPanel:_draw_material_dropdown(imgui)
         self.host:set_var(self.id, "material_list", data)
         self.env.manage_materials = false
     end
+    if imgui.IsItemHovered() then
+        if imgui.BeginTooltip() then
+            imgui.PushTextWrapPos(400)
+            imgui.Text("Save the current list to the 'This Run' list")
+            imgui.PopTextWrapPos()
+            imgui.EndTooltip()
+        end
+    end
     imgui.SameLine()
     _, self.env.material_add_multi = imgui.Checkbox("Multi###material_multi", self.env.material_add_multi)
-
+    ]]
     -- {name, checkbox_varname, table_name}
     local kinds = {
         {"Liquids", "material_liquid", "liquids"},
@@ -890,6 +1015,11 @@ function InfoPanel:_draw_material_dropdown(imgui)
     end
 
     if self.env.material_text ~= "" then
+        local tag = nil
+        if self.env.material_text:match("^%[") then
+            tag = self.env.material_text:gsub("[%[%]]", "")
+        end
+        local match_text = self.env.material_text:gsub("[^a-z0-9_]", "")
         local mattabs = self:_get_material_tables()
         for _, entry in ipairs(mattabs) do
             local kind = entry.kind
@@ -899,15 +1029,23 @@ function InfoPanel:_draw_material_dropdown(imgui)
             local matuiname = entry.uiname
             local matlocname = entry.locname
             local maticon = entry.icon
+            local mattags = entry.tags
             if not self.env[varname] then
                 goto continue
             end
             local add_me = false
-            if matname:match(self.env.material_text) then
+            if tag ~= nil then
+                for _, mtag in ipairs(mattags) do
+                    if mtag:match(tag) then
+                        add_me = true
+                    end
+                end
+            end
+            if matname:match(match_text) then
                 add_me = true
-            elseif matuiname:match(self.env.material_text) then
+            elseif matuiname:match(match_text) then
                 add_me = true
-            elseif matlocname:match(self.env.material_text) then
+            elseif matlocname:match(match_text) then
                 add_me = true
             end
 
@@ -931,13 +1069,17 @@ function InfoPanel:_draw_material_dropdown(imgui)
                     uiname = matuiname,
                     locname = matlocname,
                     icon = maticon,
+                    tags = mattags,
                 })
             end
             imgui.SameLine()
+            local hover_tooltip_func = self:_make_material_tooltip_func(entry)
             if maticon and self.config.show_images then
                 self:_draw_image(imgui, maticon, true, false)
+                self:_draw_hover_tooltip(imgui, hover_tooltip_func)
             end
             imgui.Text(("%s (%s)"):format(matlocname, matname))
+            self:_draw_hover_tooltip(imgui, hover_tooltip_func)
 
             ::continue::
         end
@@ -953,13 +1095,13 @@ function InfoPanel:_draw_material_list(imgui)
                 to_remove = idx
             end
             imgui.SameLine()
+            local hover_tooltip_func = self:_make_material_tooltip_func(entry)
             if entry.icon and self.config.show_images then
                 self:_draw_image(imgui, entry.icon, true, false)
-            end
-            if not entry.locname then
-                imgui.Text("Malformed entry: " .. smallfolk.dumps(entry))
+                self:_draw_hover_tooltip(imgui, hover_tooltip_func)
             end
             imgui.Text(("%s [%s]"):format(entry.locname, entry.name))
+            self:_draw_hover_tooltip(imgui, hover_tooltip_func)
         end
         if to_remove ~= nil then
             table.remove(self.env.material_list, to_remove)
@@ -969,6 +1111,13 @@ function InfoPanel:_draw_material_list(imgui)
 end
 
 function InfoPanel:_draw_entity_dropdown(imgui)
+    self:_draw_dropdown_inputs(imgui, {
+        label = "Entity",
+        var_prefix = "entity",
+        var_manage = "manage_entities",
+        hover_text = "Entity name or internal ID",
+    })
+    --[[
     if not self.env.entity_text then self.env.entity_text = "" end
     imgui.SetNextItemWidth(400)
     _, self.env.entity_text = imgui.InputText("Entity###entity_input", self.env.entity_text)
@@ -983,10 +1132,20 @@ function InfoPanel:_draw_entity_dropdown(imgui)
         self.host:set_var(self.id, "entity_list", data)
         self.env.manage_entities = false
     end
+    if imgui.IsItemHovered() then
+        if imgui.BeginTooltip() then
+            imgui.PushTextWrapPos(400)
+            imgui.Text("Save the current list to the 'This Run' list")
+            imgui.PopTextWrapPos()
+            imgui.EndTooltip()
+        end
+    end
     imgui.SameLine()
     _, self.env.entity_add_multi = imgui.Checkbox("Multi###entity_multi", self.env.entity_add_multi)
+    ]]
 
     if self.env.entity_text ~= "" then
+        local match_text = self.env.entity_text:gsub("[^a-zA-Z0-9_ ]", "")
         local enttab = self:_get_entity_list()
         for _, entry in ipairs(enttab) do
             local add_me = false
@@ -1058,6 +1217,13 @@ function InfoPanel:_draw_entity_list(imgui)
 end
 
 function InfoPanel:_draw_item_dropdown(imgui)
+    self:_draw_dropdown_inputs(imgui, {
+        label = "Item",
+        var_prefix = "item",
+        var_manage = "manage_items",
+        hover_text = "Item name or internal ID",
+    })
+    --[[
     if not self.env.item_text then self.env.item_text = "" end
     imgui.SetNextItemWidth(400)
     _, self.env.item_text = imgui.InputText("Item###item_input", self.env.item_text)
@@ -1074,6 +1240,7 @@ function InfoPanel:_draw_item_dropdown(imgui)
     end
     imgui.SameLine()
     _, self.env.item_add_multi = imgui.Checkbox("Multi###item_multi", self.env.item_add_multi)
+    ]]
 
     if self.env.item_text ~= "" then
         local itemtab = self:_get_item_list()

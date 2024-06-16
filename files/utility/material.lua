@@ -51,6 +51,7 @@ function generate_material_tables()
                 uiname = uiname,
                 locname = GameTextGet(uiname),
                 icon = material_get_icon(mat),
+                tags = CellFactory_GetTags(id),
             })
         end
     end

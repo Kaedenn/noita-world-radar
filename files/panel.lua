@@ -39,10 +39,14 @@ dofile_once("mods/world_radar/config.lua")
 Panel = {
     initialized = false,
     id_current = nil,   -- ID of the "current" panel
-    PANELS = { },       -- Table of panel IDs to panel instances
+    PANELS = {},        -- Table of panel IDs to panel instances
 
     debugging = false,  -- true if debugging is active/enabled
     lines = {},         -- lines displayed below the panel
+    config = {          -- non-persistent configuration
+        menu_show = true,       -- draw the Panels menu
+        menu_show_clear = true, -- include the Clear menu item
+    },
 
     colors = {          -- text color configuration
         enable = true,
@@ -324,57 +328,70 @@ end
 function Panel:build_menu(imgui)
     local current = self:current()
 
-    if imgui.BeginMenu("Panel") then
-        local label = self.debugging and "Disable" or "Enable"
-        if imgui.MenuItem(label .. " Debugging") then
-            self:set_debugging(not self.debugging)
+    if current ~= nil then
+        if current.on_menu_pre ~= nil then
+            current:on_menu_pre(imgui)
         end
+    end
 
-        if imgui.MenuItem("Copy Text") then
-            local all_lines = ""
-            for _, line_obj in ipairs(self.lines) do
-                local line = self:line_to_string(line_obj)
-                all_lines = all_lines .. line .. "\r\n"
+    if self.config.menu_show then
+        if imgui.BeginMenu("Panel") then
+            local label = self.debugging and "Disable" or "Enable"
+            if imgui.MenuItem(label .. " Debugging") then
+                self:set_debugging(not self.debugging)
             end
-            imgui.SetClipboardText(all_lines)
-        end
 
-        if imgui.MenuItem("Clear") then
-            self.lines = {}
-        end
-
-        if imgui.MenuItem("Close") then
-            conf_set(CONF.ENABLE, false)
-        end
-
-        if #self.PANELS > 1 then
-            imgui.Separator()
-
-            for pid, pobj in pairs(self.PANELS) do
-                local mstr = pobj.name
-                if pid == self.id_current then
-                    mstr = mstr .. " [*]"
+            if imgui.MenuItem("Copy Text") then
+                local all_lines = ""
+                for _, line_obj in ipairs(self.lines) do
+                    local line = self:line_to_string(line_obj)
+                    all_lines = all_lines .. line .. "\r\n"
                 end
-                if imgui.MenuItem(mstr) then
-                    self:set(pid)
+                imgui.SetClipboardText(all_lines)
+            end
+
+            if self.config.menu_show_clear then
+                if imgui.MenuItem("Clear") then
+                    self.lines = {}
                 end
             end
 
-            imgui.Separator()
+            if imgui.MenuItem("Close") then
+                conf_set(CONF.ENABLE, false)
+            end
 
-            if current ~= nil then
-                if imgui.MenuItem("Return") then
-                    self:reset()
+            if #self.PANELS > 1 then
+                imgui.Separator()
+
+                for pid, pobj in pairs(self.PANELS) do
+                    local mstr = pobj.name
+                    if pid == self.id_current then
+                        mstr = mstr .. " [*]"
+                    end
+                    if imgui.MenuItem(mstr) then
+                        self:set(pid)
+                    end
+                end
+
+                imgui.Separator()
+
+                if current ~= nil then
+                    if imgui.MenuItem("Return") then
+                        self:reset()
+                    end
                 end
             end
-        end
 
-        imgui.EndMenu()
+            imgui.EndMenu()
+        end
     end
 
     if current ~= nil then
         if current.draw_menu ~= nil then
             current:draw_menu(imgui)
+        end
+        if current.on_menu_post ~= nil then
+            current:on_menu_post(imgui)
         end
     end
 

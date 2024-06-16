@@ -7,10 +7,11 @@ local spell_cache = nil
 --[[ Get the spell for the given card ]]
 function card_get_spell(card)
     local action = EntityGetComponentIncludingDisabled(card, "ItemActionComponent")
-    if #action == 1 then
-        return ComponentGetValue2(action[1], "action_id")
+    if not action or #action ~= 1 then
+        print_error(("Entity %s lacks ItemActionComponent"):format(tostring(card)))
+        return nil
     end
-    return nil
+    return ComponentGetValue2(action[1], "action_id")
 end
 
 --[[ Get all of the spells on the given wand ]]
@@ -36,7 +37,10 @@ function spell_get_data(spell)
             spell_cache[entry.id] = entry
         end
     end
-    return spell_cache[spell] or {}
+    if spell and spell_cache[spell] then
+        return spell_cache[spell]
+    end
+    return {}
 end
 
 --[[ Obtain the (unlocalized) name of the given spell ID ]]

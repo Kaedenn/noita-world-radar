@@ -9,8 +9,6 @@ TODO: Add "auto-remove found spells" button
 TODO: Add "show triggers" (eg. temple collapse) via barrier spell effect
 
 TODO: Allow user to configure where the on-screen text is displayed
-
-TODO: Maybe inhibit save/load/clear menus if there's nothing to save/load/clear
 --]]
 
 nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
@@ -42,6 +40,11 @@ dofile_once("mods/world_radar/files/utility/spell.lua")
 InfoPanel = {
     id = "info",
     name = "Info",
+    conf = {
+        show_images = MOD_ID .. ".show_images",
+        remove_spell = MOD_ID .. ".remove_found_spell",
+        remove_material = MOD_ID .. ".remove_found_material",
+    },
     config = {
         range = math.huge,
         rare_biome_mod = 0.2,
@@ -674,7 +677,21 @@ function InfoPanel:draw_menu(imgui)
         end
         if imgui.MenuItem("Toggle Images") then
             self.config.show_images = not self.config.show_images
-            ModSettingSetNextValue(MOD_ID .. ".show_images", self.config.show_images, false)
+            ModSettingSetNextValue(self.conf.show_images, self.config.show_images, false)
+        end
+        imgui.Separator()
+        local items = {
+            {"Spells", self.conf.remove_spell},
+            {"Materials", self.conf.remove_material},
+        }
+        for _, entry in ipairs(items) do
+            local label, conf = unpack(entry)
+            local curr = ModSettingGet(conf)
+            local prefix = curr and "Disable" or "Enable"
+            local text = ("%s Remove %s on Pickup"):format(prefix, label)
+            if imgui.MenuItem(text) then
+                ModSettingSetNextValue(conf, not curr, false)
+            end
         end
         imgui.EndMenu()
     end
@@ -688,6 +705,7 @@ function InfoPanel:draw_menu(imgui)
     }
     for _, entry in ipairs(menus) do
         local plname, sname, tvar, evar = unpack(entry)
+        local data
         if imgui.BeginMenu(plname) then
             if imgui.MenuItem("Select " .. plname) then
                 self.env.manage_spells = false
@@ -698,43 +716,37 @@ function InfoPanel:draw_menu(imgui)
             end
             imgui.Separator()
             if imgui.MenuItem("Save " .. sname .. " List (This Run)") then
-                local data = smallfolk.dumps(self.env[tvar])
+                data = smallfolk.dumps(self.env[tvar])
                 self.host:set_var(self.id, tvar, data)
                 GamePrint(("Saved %d %s"):format(#self.env[tvar], plname:lower()))
             end
-            if imgui.MenuItem("Load " .. sname .. " List (This Run)") then
-                local data = self.host:get_var(self.id, tvar, "")
-                if data ~= "" then
+            data = self.host:get_var(self.id, tvar, "")
+            if data ~= "" and data ~= "{}" then
+                if imgui.MenuItem("Load " .. sname .. " List (This Run)") then
                     self.env[tvar] = smallfolk.loads(data)
                     GamePrint(("Loaded %d %s"):format(#self.env[tvar], plname:lower()))
-                else
-                    GamePrint(("No %s list saved"):format(sname:lower()))
                 end
-            end
-            if imgui.MenuItem("Clear " .. sname .. " List (This Run)") then
-                self.host:set_var(self.id, tvar, "{}")
-                GamePrint(("Cleared %s list"):format(sname:lower()))
+                if imgui.MenuItem("Clear " .. sname .. " List (This Run)") then
+                    self.host:set_var(self.id, tvar, "{}")
+                    GamePrint(("Cleared %s list"):format(sname:lower()))
+                end
             end
             imgui.Separator()
             if imgui.MenuItem("Save " .. sname .. " List (Forever)") then
-                local data = smallfolk.dumps(self.env[tvar])
+                data = smallfolk.dumps(self.env[tvar])
                 self.host:save_value(self.id, tvar, data)
                 GamePrint(("Saved %d %s"):format(#self.env[tvar], plname:lower()))
             end
-            if imgui.MenuItem("Load " .. sname .. " List (Forever)") then
-                local data = self.host:load_value(self.id, tvar, "")
-                if data ~= "" then
+            data = self.host:load_value(self.id, tvar, "")
+            if data ~= "" and data ~= "{}" then
+                if imgui.MenuItem("Load " .. sname .. " List (Forever)") then
                     self.env[tvar] = smallfolk.loads(data)
                     GamePrint(("Loaded %d %s"):format(#self.env[tvar], plname:lower()))
-                else
-                    GamePrint(("No %s list saved"):format(sname:lower()))
                 end
-            end
-            if imgui.MenuItem("Clear " .. sname .. " List (Forever)") then
-                if self.host:remove_value(self.id, tvar) then
-                    GamePrint(("Cleared %s list"):format(sname:lower()))
-                else
-                    GamePrint(("No %s list saved"):format(sname:lower()))
+                if imgui.MenuItem("Clear " .. sname .. " List (Forever)") then
+                    if self.host:remove_value(self.id, tvar) then
+                        GamePrint(("Cleared %s list"):format(sname:lower()))
+                    end
                 end
             end
             imgui.EndMenu()
@@ -812,7 +824,6 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                 if entry.icon and self.config.show_images then
                     self:_draw_image(imgui, entry.icon, true, false)
                 end
-                -- TODO: Make text configurable on localization
                 imgui.Text(("%s (%s)"):format(GameTextGet(entry.name), entry.id))
             end
         end
@@ -836,7 +847,6 @@ function InfoPanel:_draw_spell_list(imgui)
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
-            -- TODO: Make text configurable on localization
             imgui.Text(("%s [%s]"):format(label, entry.id))
         end
         if to_remove ~= nil then
@@ -927,7 +937,6 @@ function InfoPanel:_draw_material_dropdown(imgui)
             if maticon and self.config.show_images then
                 self:_draw_image(imgui, maticon, true, false)
             end
-            -- TODO: Make text configurable on localization
             imgui.Text(("%s (%s)"):format(matlocname, matname))
 
             ::continue::
@@ -947,7 +956,6 @@ function InfoPanel:_draw_material_list(imgui)
             if entry.icon and self.config.show_images then
                 self:_draw_image(imgui, entry.icon, true, false)
             end
-            -- TODO: Make text configurable on localization
             if not entry.locname then
                 imgui.Text("Malformed entry: " .. smallfolk.dumps(entry))
             end
@@ -1016,7 +1024,6 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                         if result then break end
                     end
                 end
-                -- TODO: Make text configurable on localization
                 imgui.Text(("%s (%s)"):format(locname, entry.name))
             end
         end
@@ -1041,7 +1048,6 @@ function InfoPanel:_draw_entity_list(imgui)
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
-            -- TODO: Make text configurable on localization
             imgui.Text(("%s [%s]"):format(label, entry.id))
         end
         if to_remove ~= nil then
@@ -1105,7 +1111,6 @@ function InfoPanel:_draw_item_dropdown(imgui)
                 if entry.icon and self.config.show_images then
                     self:_draw_image(imgui, entry.icon, true, false)
                 end
-                -- TODO: Make text configurable on localization
                 imgui.Text(("%s [%s]"):format(locname, entry.id))
             end
         end
@@ -1129,7 +1134,6 @@ function InfoPanel:_draw_item_list(imgui)
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
-            -- TODO: Make text configurable on localization
             imgui.Text(("%s [%s]"):format(label, entry.id))
         end
         if to_remove ~= nil then
@@ -1139,11 +1143,83 @@ function InfoPanel:_draw_item_list(imgui)
     end
 end
 
+--[[ Determine if we need to remove any list entries and do so ]]
+function InfoPanel:_process_remove_entries()
+    local remove_spell = ModSettingGet(self.conf.remove_spell)
+    if remove_spell then
+        local inv_cards = get_with_tags({"card_action"}, {player=true})
+        local inv_spell_map = {}
+        for _, entpair in ipairs(inv_cards) do
+            local entid, entname = unpack(entpair)
+            local spell = card_get_spell(entid)
+            inv_spell_map[spell] = (inv_spell_map[spell] or 0) + 1
+        end
+        local inv_spells = {}
+        for spell, count in pairs(inv_spell_map) do
+            table.insert(inv_spells, spell)
+        end
+
+        local to_remove = {}
+        for idx, entry in ipairs(self.env.spell_list) do
+            if inv_spell_map[entry.id] then
+                table.insert(to_remove, 1, idx)
+            end
+        end
+
+        if #to_remove > 0 then
+            for _, idx in ipairs(to_remove) do
+                table.remove(self.env.spell_list, idx)
+            end
+            self.host:print(("Removed %d spell(s) from the spell list"):format(#to_remove))
+        end
+    end
+
+    local remove_material = ModSettingGet(self.conf.remove_material)
+    if remove_material then
+        local inv_mat_map = {}
+        for _, entpair in ipairs(get_with_tags({"potion", "powder_stash"}, {player=true})) do
+            local entid, entname = unpack(entpair)
+            local cmap, clist = container_get_contents(entid)
+            for matname, count in pairs(cmap) do
+                if not inv_mat_map[matname] then
+                    inv_mat_map[matname] = {
+                        count = count,
+                        containers = {entid},
+                    }
+                else
+                    inv_mat_map[matname].count = inv_mat_map[matname].count + count
+                    table.insert(inv_mat_map[matname].containers, entid)
+                end
+            end
+        end
+        local inv_materials = {}
+        for matname, matinfo in pairs(inv_mat_map) do
+            table.insert(inv_materials, matname)
+        end
+
+        local to_remove = {}
+        for idx, entry in ipairs(self.env.material_list) do
+            if inv_mat_map[entry.name] then
+                table.insert(to_remove, 1, idx)
+            end
+        end
+
+        if #to_remove > 0 then
+            for _, idx in ipairs(to_remove) do
+                table.remove(self.env.material_list, idx)
+            end
+            self.host:print(("Removed %d material(s) from the material list"):format(#to_remove))
+        end
+    end
+end
+
 --[[ Public: draw the panel content ]]
 function InfoPanel:draw(imgui)
     self.host:text_clear()
-    self.config.show_images = ModSettingGet(MOD_ID .. ".show_images")
+    self.config.show_images = ModSettingGet(self.conf.show_images)
     if self.config.show_images == nil then self.config.show_images = true end
+
+    self:_process_remove_entries()
 
     self:_draw_checkboxes(imgui)
     if self.env.manage_spells then
@@ -1201,6 +1277,7 @@ function InfoPanel:draw(imgui)
                 if EntityHasTag(entity, "powder_stash") then
                     div = 15
                 end
+                -- TODO: Handle Alchemist flasks that contain 200%
                 for matname, amount in pairs(container_get_contents(entity)) do
                     table.insert(contents, ("%s %d%%"):format(matname, amount/div))
                 end
@@ -1216,12 +1293,16 @@ function InfoPanel:draw(imgui)
         for _, entry in ipairs(self:_find_containers()) do
             local contents = {}
             for _, mat in ipairs(entry.rare_contents) do
-                table.insert(contents, GameTextGet(mat.uiname))
+                local matinfo = self:_get_material_by_name(mat.name)
+                table.insert(contents, matinfo.locname or GameTextGet(mat.uiname))
             end
             self.host:p(("%s with %s detected nearby!!"):format(
                 entry.name, table.concat(contents, ", ")))
             local ex, ey = EntityGetTransform(entry.entity)
-            self.host:d(("%s %d at {%d,%d}"):format(entry.name, entry.entity, ex, ey))
+            if ex ~= nil and ey ~= nil then
+                local pos_str = ("%d, %d"):format(ex, ey)
+                self.host:d(("%s %d at %s"):format(entry.name, entry.entity, pos_str))
+            end
         end
     end
 
@@ -1251,7 +1332,10 @@ function InfoPanel:draw(imgui)
             end
             self.host:p(("%s detected nearby!!"):format(entity.name))
             local ex, ey = EntityGetTransform(entity.entity)
-            self.host:d(("%s %d at {%d,%d}"):format(entity.name, entity.entity, ex, ey))
+            if ex ~= nil and ey ~= nil then
+                local pos_str = ("%d, %d"):format(ex, ey)
+                self.host:d(("%s %d at %s"):format(entity.name, entity.entity, pos_str))
+            end
         end
     end
 
@@ -1270,7 +1354,7 @@ function InfoPanel:draw(imgui)
             local spells = table.concat(spell_list, ", ")
             self.host:p(("Wand with %s detected nearby!!"):format(spells))
             local wx, wy = EntityGetTransform(entid)
-            if wx ~= nil and wy ~= nil and wx ~= 0 and wy ~= 0 then
+            if wx ~= nil and wy ~= nil then
                 local pos_str = ("%d, %d"):format(wx, wy)
                 self.host:d(("Wand %d at %s with %s"):format(entid, pos_str, spells))
             end
@@ -1285,7 +1369,7 @@ function InfoPanel:draw(imgui)
             local name = ("%s [%s]"):format(spell_name, spell)
             self.host:p(("Spell %s detected nearby!!"):format(name))
             local wx, wy = EntityGetTransform(entid)
-            if wx ~= nil and wy ~= nil and wx ~= 0 and wy ~= 0 then
+            if wx ~= nil and wy ~= nil then
                 local pos_str = ("%d, %d"):format(wx, wy)
                 self.host:d(("Spell %d at %s with %s"):format(entid, pos_str, name))
             end
@@ -1306,6 +1390,8 @@ function InfoPanel:draw_closed(imgui)
     if self.env.onscreen then
         self:_draw_onscreen_gui()
     end
+
+    self:_process_remove_entries()
 end
 
 --[[ Public: update configuration ]]
@@ -1318,6 +1404,17 @@ function InfoPanel:configure(config)
             self.config[key] = value
         end
     end
+end
+
+--[[ Public: called before the main menu is drawn ]]
+function InfoPanel:on_menu_pre(imgui)
+    self.env.save_show_clear = self.host.config.menu_show_clear
+    self.host.config.menu_show_clear = false
+end
+
+--[[ Public: called after the main menu is drawn ]]
+function InfoPanel:on_menu_post(imgui)
+    self.host.config.menu_show_clear = self.env.save_show_clear
 end
 
 return InfoPanel

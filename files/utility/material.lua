@@ -18,12 +18,15 @@ function container_get_contents(entity)
     -- Sort descending
     table.sort(entries, function(left, right) return left[2] > right[2] end)
 
-    local results = {}
+    local content_map = {}
+    local content_list = {}
     for _, entry in ipairs(entries) do
         local matid, count = unpack(entry)
-        results[CellFactory_GetName(matid)] = count
+        local matname = CellFactory_GetName(matid)
+        content_map[matname] = count
+        table.insert(content_list, {matname, count})
     end
-    return results
+    return content_map, content_list
 end
 
 --[[ Easily obtain all of the materials ]]

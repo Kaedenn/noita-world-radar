@@ -28,6 +28,20 @@ mod_settings = {
                 value_default = false,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
+            {
+                id = "remove_found_spell",
+                ui_name = "Remove Spell on Pickup",
+                ui_description = "Remove a spell from the scanner list when you pick up the spell.",
+                value_default = true,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            {
+                id = "remove_found_material",
+                ui_name = "Remove Material on Pickup",
+                ui_description = "Remove a material from the scanner list when you pick up the material.",
+                value_default = false,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
         },
     },
 
@@ -35,18 +49,6 @@ mod_settings = {
         category_id = "display_settings",
         ui_name = "Display Settings",
         settings = {
-            --[[{
-                id = "localize",
-                ui_name = "Localization Mode",
-                ui_description = "How should things like entity and material names be displayed?",
-                value_default = "both",
-                values = {
-                    {"local", "Localized (Translated) Name"},
-                    {"internal", "Internal Name"},
-                    {"both", "Both Localized and Internal Names"},
-                },
-                scope = MOD_SETTING_SCOPE_RUNTIME,
-            },]]
             {
                 id = "show_images",
                 ui_name = "Show Images",

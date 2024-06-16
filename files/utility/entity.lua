@@ -159,7 +159,8 @@ end
 -- Returns a table of {entity_id, entity_name} pairs.
 --
 -- Filters:
---  no_player       omit entities descending from the player entitiy
+--  no_player       omit entities descending from (held by) the player
+--  player          omit entities not descending from (held by) the player
 --]]
 function get_with_tags(tags, filters)
     if not filters then filters = {} end
@@ -167,9 +168,9 @@ function get_with_tags(tags, filters)
     for _, tag in ipairs(tags) do
         for _, entity in ipairs(EntityGetWithTag(tag)) do
             local add_me = true
-            if filters.no_player and is_child_of(entity, nil) then
-                add_me = false
-            end
+            local is_held = is_child_of(entity, nil)
+            if filters.no_player and is_held then add_me = false end
+            if filters.player and not is_held then add_me = false end
             if add_me then
                 entities[entity] = get_name(entity)
             end

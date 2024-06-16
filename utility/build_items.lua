@@ -169,7 +169,6 @@ local function xml_lookup(root, name, nth, tag)
             end
             curr_nth = curr_nth + 1
         end
-        ::continue::
     end
     return nil, 0
 end

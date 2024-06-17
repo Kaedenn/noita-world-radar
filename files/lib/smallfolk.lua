@@ -1,19 +1,24 @@
 --[[
 
 Copyright (c) 2014 Robin Wellner
+Tweaked slightly by Kaedenn A. D. N., 2024
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
-documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
-the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and 
-to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED 
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL 
-THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
-CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ]]
 
@@ -36,7 +41,12 @@ function dump_type:number(nmemo, memo, acc)
 	return nmemo
 end
 
-function dump_type:table(nmemo, memo, acc)
+function dump_type:table(nmemo, memo, acc, config)
+	local entry_pre = config and config.entry_pre
+	local entry_post = config and config.entry_post
+	local obj_pre = config and config.obj_pre
+	local obj_post = config and config.obj_post
+
 	if memo[self] then
 		acc[#acc + 1] = '@'
 		acc[#acc + 1] = tostring(memo[self])
@@ -45,24 +55,34 @@ function dump_type:table(nmemo, memo, acc)
 	nmemo = nmemo + 1
 	memo[self] = nmemo
 	acc[#acc + 1] = '{'
+	if obj_pre then acc[#acc + 1] = obj_pre end
 	local nself = #self
 	for i = 1, nself do -- don't use ipairs here, we need the gaps
+		if entry_pre and entry_pre ~= "" then acc[#acc + 1] = entry_pre end
 		nmemo = dump_object(self[i], nmemo, memo, acc)
 		acc[#acc + 1] = ','
+		if entry_post and entry_post ~= "" then acc[#acc + 1] = entry_post end
 	end
 	for k, v in pairs(self) do
 		if type(k) ~= 'number' or floor(k) ~= k or k < 1 or k > nself then
+			if entry_pre and entry_pre ~= "" then acc[#acc + 1] = entry_pre end
 			nmemo = dump_object(k, nmemo, memo, acc)
 			acc[#acc + 1] = ':'
 			nmemo = dump_object(v, nmemo, memo, acc)
 			acc[#acc + 1] = ','
+			if entry_post and entry_post ~= "" then acc[#acc + 1] = entry_post end
 		end
 	end
-	acc[#acc] = acc[#acc] == '{' and '{}' or '}'
+	if acc[#acc] == '{' then
+		acc[#acc] = '{}'
+	else
+		if obj_post then acc[#acc] = obj_post end
+		acc[#acc+1] = '}'
+	end
 	return nmemo
 end
 
-function dump_object(object, nmemo, memo, acc)
+function dump_object(object, nmemo, memo, acc, config)
 	if object == true then
 		acc[#acc + 1] = 't'
 	elseif object == false then
@@ -84,16 +104,16 @@ function dump_object(object, nmemo, memo, acc)
 		if not dump_type[t] then
 			error('cannot dump type ' .. t)
 		end
-		return dump_type[t](object, nmemo, memo, acc)
+		return dump_type[t](object, nmemo, memo, acc, config)
 	end
 	return nmemo
 end
 
-function M.dumps(object)
+function M.dumps(object, config)
 	local nmemo = 0
 	local memo = {}
 	local acc = {}
-	dump_object(object, nmemo, memo, acc)
+	dump_object(object, nmemo, memo, acc, config)
 	return concat(acc)
 end
 
@@ -101,8 +121,29 @@ local function invalid(i)
 	error('invalid input at position ' .. i)
 end
 
-local nonzero_digit = {['1'] = true, ['2'] = true, ['3'] = true, ['4'] = true, ['5'] = true, ['6'] = true, ['7'] = true, ['8'] = true, ['9'] = true}
-local is_digit = {['0'] = true, ['1'] = true, ['2'] = true, ['3'] = true, ['4'] = true, ['5'] = true, ['6'] = true, ['7'] = true, ['8'] = true, ['9'] = true}
+local nonzero_digit = {
+	['1'] = true,
+	['2'] = true,
+	['3'] = true,
+	['4'] = true,
+	['5'] = true,
+	['6'] = true,
+	['7'] = true,
+	['8'] = true,
+	['9'] = true
+}
+local is_digit = {
+	['0'] = true,
+	['1'] = true,
+	['2'] = true,
+	['3'] = true,
+	['4'] = true,
+	['5'] = true,
+	['6'] = true,
+	['7'] = true,
+	['8'] = true,
+	['9'] = true
+}
 local function expect_number(string, start)
 	local i = start
 	local head = string:sub(i, i)
@@ -230,3 +271,5 @@ function M.loads(string, maxsize)
 end
 
 return M
+
+-- vim: set ts=4 sts=4 sw=4 noet nolist:

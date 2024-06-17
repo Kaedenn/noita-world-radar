@@ -15,6 +15,8 @@
 -- panel:draw(imgui)       (required)
 -- panel:draw_menu(imgui)  (optional)
 -- panel:configure(table)  (optional)
+-- panel:on_draw_pre(imgui)     (optional; called before draw/draw_closed)
+-- panel:on_draw_post(imgui)    (optional; called after draw/draw_closed)
 --
 -- These entries have the following purpose:
 -- panel.id       string    the internal name of the panel
@@ -34,6 +36,8 @@
 
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("mods/world_radar/config.lua")
+
+-- TODO: Document Line table layout (host:p, host:d)
 
 --[[ Template object with default values for the Panel class ]]
 Panel = {
@@ -289,14 +293,16 @@ end
 --]]
 function Panel:set_var(pid, varname, value)
     local key = ("%s_panel_%s_%s"):format(MOD_ID, pid, varname)
+    if type(value) == "boolean" then
+        value = value and "1" or "0"
+    elseif type(value) ~= "string" then
+        value = tostring(value)
+    end
     local encoded = value:gsub("\"", "&quot;")
     GlobalsSetValue(key, encoded)
 end
 
---[[ Get a value in lua_globals.
---
--- Returns default if the key isn't present. See set_var above.
---]]
+--[[ Get a value in lua_globals or the default value if not present ]]
 function Panel:get_var(pid, varname, default)
     local key = ("%s_panel_%s_%s"):format(MOD_ID, pid, varname)
     local value = GlobalsGetValue(key, Panel.DEFAULT_VALUE)
@@ -334,56 +340,45 @@ function Panel:build_menu(imgui)
         end
     end
 
-    if self.config.menu_show then
-        if imgui.BeginMenu("Panel") then
-            local label = self.debugging and "Disable" or "Enable"
-            if imgui.MenuItem(label .. " Debugging") then
-                self:set_debugging(not self.debugging)
-            end
-
-            if imgui.MenuItem("Copy Text") then
-                local all_lines = ""
-                for _, line_obj in ipairs(self.lines) do
-                    local line = self:line_to_string(line_obj)
-                    all_lines = all_lines .. line .. "\r\n"
-                end
-                imgui.SetClipboardText(all_lines)
-            end
-
-            if self.config.menu_show_clear then
-                if imgui.MenuItem("Clear") then
-                    self.lines = {}
-                end
-            end
-
-            if imgui.MenuItem("Close") then
-                conf_set(CONF.ENABLE, false)
-            end
-
-            if #self.PANELS > 1 then
-                imgui.Separator()
-
-                for pid, pobj in pairs(self.PANELS) do
-                    local mstr = pobj.name
-                    if pid == self.id_current then
-                        mstr = mstr .. " [*]"
-                    end
-                    if imgui.MenuItem(mstr) then
-                        self:set(pid)
-                    end
-                end
-
-                imgui.Separator()
-
-                if current ~= nil then
-                    if imgui.MenuItem("Return") then
-                        self:reset()
-                    end
-                end
-            end
-
-            imgui.EndMenu()
+    if self.config.menu_show and imgui.BeginMenu("Panel") then
+        local label = self.debugging and "Disable" or "Enable"
+        if imgui.MenuItem(label .. " Debugging") then
+            self:set_debugging(not self.debugging)
         end
+
+        if imgui.MenuItem("Copy Text") then
+            local all_lines = ""
+            for _, line_obj in ipairs(self.lines) do
+                local line = self:line_to_string(line_obj)
+                all_lines = all_lines .. line .. "\r\n"
+            end
+            imgui.SetClipboardText(all_lines)
+        end
+
+        if self.config.menu_show_clear and imgui.MenuItem("Clear") then
+            self.lines = {}
+        end
+
+        if imgui.MenuItem("Close") then
+            conf_set(CONF.ENABLE, false)
+        end
+
+        -- Show panel selection code for multi-panel use
+        if #self.PANELS > 1 then
+            imgui.Separator()
+            for pid, pobj in pairs(self.PANELS) do
+                local mstr = pobj.name
+                if pid == self.id_current then mstr = mstr .. " [*]" end
+                if imgui.MenuItem(mstr) then self:set(pid) end
+            end
+
+            imgui.Separator()
+            if current and imgui.MenuItem("Return") then
+                self:reset()
+            end
+        end
+
+        imgui.EndMenu()
     end
 
     if current ~= nil then
@@ -466,9 +461,11 @@ end
 function Panel:draw(imgui)
     local current = self:current()
     if current ~= nil then
+        if current.on_draw_pre then current:on_draw_pre(imgui) end
         imgui.PushID(MOD_ID .. "_panel_" .. self.id_current)
         current:draw(imgui)
         imgui.PopID()
+        if current.on_draw_post then current:on_draw_post(imgui) end
     end
 
     local show_images = ModSettingGet(MOD_ID .. ".show_images")
@@ -482,9 +479,13 @@ end
 function Panel:draw_closed(imgui)
     local current = self:current()
     if current ~= nil then
+        if current.on_draw_pre then current:on_draw_pre(imgui) end
+        imgui.PushID(MOD_ID .. "_panel_" .. self.id_current .. "_closed")
         if current.draw_closed then
             current:draw_closed(imgui)
         end
+        imgui.PopID()
+        if current.on_draw_post then current:on_draw_post(imgui) end
     end
 end
 

@@ -1300,33 +1300,33 @@ function InfoPanel:on_draw_pre(imgui)
         local flags = bit.bor(
             imgui.WindowFlags.HorizontalScrollbar)
         if imgui.Begin("Info Panel Debugging Window", nil, flags) then
-            local dumps_config = {obj_pre="\n", entry_pre="  ", entry_post="\n"}
+            local dconfig = {obj_pre="\n", entry_pre="  ", entry_post="\n"}
             imgui.Text(("spell_list[%d] = {%s...}"):format(
                 #self.env.spell_list,
-                smallfolk.dumps(self.env.spell_list[1] or {}, dumps_config)))
+                smallfolk.dumps(self.env.spell_list[1] or {}, dconfig)))
             if imgui.Button("Copy Spell List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.spell_list, dumps_config))
+                imgui.SetClipboardText(smallfolk.dumps(self.env.spell_list, dconfig))
             end
 
             imgui.Text(("material_list[%d] = {%s...}"):format(
                 #self.env.material_list,
-                smallfolk.dumps(self.env.material_list[1] or {}, dumps_config)))
+                smallfolk.dumps(self.env.material_list[1] or {}, dconfig)))
             if imgui.Button("Copy Material List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.material_list, dumps_config))
+                imgui.SetClipboardText(smallfolk.dumps(self.env.material_list, dconfig))
             end
 
             imgui.Text(("entity_list[%d] = {%s...}"):format(
                 #self.env.entity_list,
-                smallfolk.dumps(self.env.entity_list[1] or {}, dumps_config)))
+                smallfolk.dumps(self.env.entity_list[1] or {}, dconfig)))
             if imgui.Button("Copy Entity List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.entity_list, dumps_config))
+                imgui.SetClipboardText(smallfolk.dumps(self.env.entity_list, dconfig))
             end
 
             imgui.Text(("item_list[%d] = {%s...}"):format(
                 #self.env.item_list,
-                smallfolk.dumps(self.env.item_list[1] or {}, dumps_config)))
+                smallfolk.dumps(self.env.item_list[1] or {}, dconfig)))
             if imgui.Button("Copy Item List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.item_list, dumps_config))
+                imgui.SetClipboardText(smallfolk.dumps(self.env.item_list, dconfig))
             end
             imgui.End()
         end

@@ -112,6 +112,7 @@ compare_mods() { # local remote
   diff_args+=(-x "*.tar.gz")         # because backups
   diff_args+=(-x "ref")              # remove reference items
   diff_args+=(-x "build")            # remove compilation/bundling stuff
+  diff_args+=(-x "workshop")         # remove workshop symlink
   if [[ -z "${DEBUG:-}" ]]; then
     diff_args+=("-q")
   fi

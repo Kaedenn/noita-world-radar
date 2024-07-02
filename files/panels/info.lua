@@ -160,6 +160,19 @@ local function aggregate(entries)
     return results
 end
 
+--[[ Determine if the player has the spell in their inventory ]]
+local function player_has_spell(spell_id)
+    local inv_cards = get_with_tags({"card_action"}, {player=true})
+    for _, entpair in ipairs(inv_cards) do
+        local entid, entname = unpack(entpair)
+        local spell = card_get_spell(entid)
+        if spell == spell_id then
+            return true
+        end
+    end
+    return false
+end
+
 --[[ Draw an image using imgui ]]
 function InfoPanel:_draw_image(imgui, image, rescale, end_line)
     local path = image
@@ -551,6 +564,30 @@ function InfoPanel:_draw_onscreen_gui()
     GuiIdPop(gui)
 end
 
+--[[ Perform any needed updates on a specific table ]]
+function InfoPanel:_update_table(data, name)
+    local modified = false
+    for _, tbl_entry in ipairs(data) do
+        if not tbl_entry.config then
+            tbl_entry.config = {}
+            modified = true
+        end
+        if name == "spells" then
+            -- Nothing to do yet
+        elseif name == "materials" then
+            if not tbl_entry.tags then
+                tbl_entry.tags = CellFactory_GetTags(tbl_entry.id)
+                modified = true
+            end
+        elseif name == "entities" then
+            -- Nothing to do yet
+        elseif name == "items" then
+            -- Nothing to do yet
+        end
+    end
+    return modified
+end
+
 --[[ Initialize the various tables from their various places ]]
 function InfoPanel:_init_tables()
     local tables = {
@@ -587,14 +624,27 @@ function InfoPanel:_init_tables()
                     new_entry = self:_get_item_by_name(item)
                 end
                 if not new_entry or table_empty(new_entry) then
-                    new_entry = {id=item, name=item, path=nil, icon=nil}
                     print(("Failed to map %s %q"):format(var, item))
+                    new_entry = {
+                        id=item,
+                        name=item,
+                        path=nil,
+                        icon=nil,
+                        config={},
+                    }
+                end
+                if not new_entry.config then
+                    new_entry.config = {}
                 end
                 table.insert(data, new_entry)
             end
             from_table = "default"
         end
         if #data > 0 then
+            if self:_update_table(data, name) then
+                print(("Updated missing data for %s table"):format(name))
+                self.host:set_var(self.id, var, smallfolk.dumps(data))
+            end
             self.env[var] = data
             self.host:print(("Loaded %d %s from %s %s table"):format(
                 #self.env[var], name, from_table, var))
@@ -903,7 +953,16 @@ function InfoPanel:_draw_spell_dropdown(imgui)
             if add_me then
                 if imgui.SmallButton("Add###add_" .. entry.id) then
                     if not self.env.spell_add_multi then self.env.spell_text = "" end
-                    table.insert(self.env.spell_list, entry)
+                    local new_entry = {
+                        id = entry.id,
+                        name = entry.name,
+                        icon = entry.icon,
+                        config = {},
+                    }
+                    if player_has_spell(entry.id) then
+                        new_entry.config.keep = 1
+                    end
+                    table.insert(self.env.spell_list, new_entry)
                 end
                 imgui.SameLine()
                 if entry.icon and self.config.show_images then
@@ -917,13 +976,26 @@ function InfoPanel:_draw_spell_dropdown(imgui)
 end
 
 function InfoPanel:_draw_spell_list(imgui)
+    local ret
     local to_remove = nil
     local flags = imgui.WindowFlags.HorizontalScrollbar
     if imgui.BeginChild("Spell List###spell_list", 0, 0, true, flags) then
         for idx, entry in ipairs(self.env.spell_list) do
+            if not entry.config then entry.config = {} end
+            local keep = entry.config.keep == 1
             if imgui.SmallButton("Remove###remove_" .. entry.id) then
                 to_remove = idx
             end
+            imgui.SameLine()
+            ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
+            if ret then
+                if keep then
+                    entry.config.keep = 1
+                else
+                    entry.config.keep = 0
+                end
+            end
+            self:_draw_hover_tooltip(imgui, "If checked, do not remove this spell upon pickup")
             imgui.SameLine()
             if entry.icon and self.config.show_images then
                 self:_draw_image(imgui, entry.icon, true, false)
@@ -934,6 +1006,9 @@ function InfoPanel:_draw_spell_list(imgui)
                 if not label or label == "" then label = entry.name end
             end
             imgui.Text(("%s [%s]"):format(label, entry.id))
+            if self.env.do_debug then
+                imgui.Text(smallfolk.dumps(entry))
+            end
         end
         if to_remove ~= nil then
             table.remove(self.env.spell_list, to_remove)
@@ -1025,6 +1100,7 @@ function InfoPanel:_draw_material_dropdown(imgui)
                     locname = matlocname,
                     icon = maticon,
                     tags = mattags,
+                    config = {},
                 })
             end
             imgui.SameLine()
@@ -1090,7 +1166,7 @@ function InfoPanel:_draw_entity_dropdown(imgui)
             end
             -- Hide duplicate entities from being added more than once
             for _, entity in ipairs(self.env.entity_list) do
-                if entity.id == entry.id then
+                if entity.path == entry.path then
                     add_me = false
                 end
             end
@@ -1102,6 +1178,7 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                         name = entry.name,
                         path = entry.path,
                         icon = entry.icon,
+                        config = {},
                     })
                 end
                 imgui.SameLine()
@@ -1111,6 +1188,9 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                         local result = self:_draw_image(imgui, path, true, false)
                         if result then break end
                     end
+                end
+                if type(entry.path) == "string" and entry.path:match("/illusions/") then
+                    locname = locname .. " [illusion]"
                 end
                 imgui.Text(("%s (%s)"):format(locname, entry.name))
             end
@@ -1135,6 +1215,9 @@ function InfoPanel:_draw_entity_list(imgui)
             if label:match("^[$]") then
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
+            end
+            if type(entry.path) == "string" and entry.path:match("/illusions/") then
+                label = label .. " [illusion]"
             end
             imgui.Text(("%s [%s]"):format(label, entry.id))
         end
@@ -1170,7 +1253,7 @@ function InfoPanel:_draw_item_dropdown(imgui)
             end
             -- Hide duplicate items from being added more than once
             for _, entity in ipairs(self.env.item_list) do
-                if entity.name == entry.name then
+                if entity.path == entry.path then
                     add_me = false
                 end
             end
@@ -1183,6 +1266,7 @@ function InfoPanel:_draw_item_dropdown(imgui)
                         path = entry.path,
                         icon = entry.icon,
                         tags = entry.tags,
+                        config = {},
                     })
                 end
                 imgui.SameLine()
@@ -1225,22 +1309,32 @@ end
 function InfoPanel:_process_remove_entries()
     local remove_spell = ModSettingGet(self.conf.remove_spell)
     if remove_spell then
+        -- Obtain table of spells currently in inventory
         local inv_cards = get_with_tags({"card_action"}, {player=true})
         local inv_spell_map = {}
         for _, entpair in ipairs(inv_cards) do
             local entid, entname = unpack(entpair)
             local spell = card_get_spell(entid)
-            inv_spell_map[spell] = (inv_spell_map[spell] or 0) + 1
-        end
-        local inv_spells = {}
-        for spell, count in pairs(inv_spell_map) do
-            table.insert(inv_spells, spell)
+            if not inv_spell_map[spell] then
+                inv_spell_map[spell] = 0
+            end
+            inv_spell_map[spell] = inv_spell_map[spell] + 1
         end
 
         local to_remove = {}
         for idx, entry in ipairs(self.env.spell_list) do
+            local min_keep = 0
+            if entry.config and entry.config.keep then
+                if type(entry.config.keep) == "boolean" then
+                    min_keep = math.huge
+                elseif type(entry.config.keep) == "number" then
+                    min_keep = entry.config.keep
+                end
+            end
             if inv_spell_map[entry.id] then
-                table.insert(to_remove, 1, idx)
+                if inv_spell_map[entry.id] > min_keep then
+                    table.insert(to_remove, 1, idx)
+                end
             end
         end
 
@@ -1260,10 +1354,7 @@ function InfoPanel:_process_remove_entries()
             local cmap, clist = container_get_contents(entid)
             for matname, count in pairs(cmap) do
                 if not inv_mat_map[matname] then
-                    inv_mat_map[matname] = {
-                        count = count,
-                        containers = {entid},
-                    }
+                    inv_mat_map[matname] = {count=count, containers={entid}}
                 else
                     inv_mat_map[matname].count = inv_mat_map[matname].count + count
                     table.insert(inv_mat_map[matname].containers, entid)
@@ -1296,40 +1387,31 @@ end
 -- Note: called *outside* the PushID/PopID guard!
 --]]
 function InfoPanel:on_draw_pre(imgui)
-    if self.env.do_debug then
-        local flags = bit.bor(
-            imgui.WindowFlags.HorizontalScrollbar)
-        if imgui.Begin("Info Panel Debugging Window", nil, flags) then
-            local dconfig = {obj_pre="\n", entry_pre="  ", entry_post="\n"}
-            imgui.Text(("spell_list[%d] = {%s...}"):format(
-                #self.env.spell_list,
-                smallfolk.dumps(self.env.spell_list[1] or {}, dconfig)))
-            if imgui.Button("Copy Spell List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.spell_list, dconfig))
+    if not self.env.do_debug then return end
+    local tables = {
+        {"Spell", "spell_list"},
+        {"Material", "material_list"},
+        {"Entity", "entity_list"},
+        {"Item", "item_list"},
+    }
+    local flags = bit.bor(
+        imgui.WindowFlags.HorizontalScrollbar)
+    if imgui.Begin("Info Panel Debugging Window", nil, flags) then
+        for _, table_info in ipairs(tables) do
+            local tbl_name, tbl_var = unpack(table_info)
+            if imgui.Button(("Copy %s List"):format(tbl_name)) then
+                imgui.SetClipboardText(smallfolk.dumps(self.env[tbl_name]))
+                self.host:print(("Copied %s (%d entries) to the clipboard"):format(
+                    tbl_var, #self.env[tbl_var]))
             end
-
-            imgui.Text(("material_list[%d] = {%s...}"):format(
-                #self.env.material_list,
-                smallfolk.dumps(self.env.material_list[1] or {}, dconfig)))
-            if imgui.Button("Copy Material List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.material_list, dconfig))
+            local entries = self.env[tbl_var]
+            imgui.Text(("%s[%d] = {"):format(tbl_var, #entries))
+            for _, entry in ipairs(entries) do
+                imgui.Text(("    %s,"):format(smallfolk.dumps(entry)))
             end
-
-            imgui.Text(("entity_list[%d] = {%s...}"):format(
-                #self.env.entity_list,
-                smallfolk.dumps(self.env.entity_list[1] or {}, dconfig)))
-            if imgui.Button("Copy Entity List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.entity_list, dconfig))
-            end
-
-            imgui.Text(("item_list[%d] = {%s...}"):format(
-                #self.env.item_list,
-                smallfolk.dumps(self.env.item_list[1] or {}, dconfig)))
-            if imgui.Button("Copy Item List") then
-                imgui.SetClipboardText(smallfolk.dumps(self.env.item_list, dconfig))
-            end
-            imgui.End()
+            imgui.Text("}")
         end
+        imgui.End()
     end
 end
 

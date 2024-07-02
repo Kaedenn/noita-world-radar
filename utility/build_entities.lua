@@ -129,10 +129,7 @@ function main()
                 ename = "$animal_chest_leggy"
             end
 
-            if fpath:match("/illusions/") then
-                logger.debug("File %s at %q defines illusory entity %q; skipping",
-                    fpath, name, ename)
-            elseif ename:match("^[$]animal_") then
+            if ename:match("^[$]animal_") then
                 logger.debug("File %s at %q defines entity %q", fpath, name, ename)
                 table.insert(entlist, {fpath, ename})
             else
@@ -141,6 +138,8 @@ function main()
             end
         end
     end
+
+    -- TODO: Remove illusory entities that have a normal counterpart
 
     logger.info("Found %d entities in %s", #entlist, argv.data_path)
 

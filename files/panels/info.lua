@@ -3,8 +3,12 @@ The "Info" Panel: Display interesting information
 
 TODO: Only display the primary biome of a biome group
 
+TODO: Add icons to the nearby item list
+
 TODO: Add "include all unknown spells" button
-TODO: Add "auto-remove found spells" button
+TODO: Add ability to ignore always-cast spells
+
+TODO: Add treasure chest prediction
 
 TODO: Add "show triggers" (eg. temple collapse) via barrier spell effect
 
@@ -24,6 +28,8 @@ dofile_once("mods/world_radar/files/utility/material.lua")
 -- luacheck: globals container_get_contents material_get_icon generate_material_tables
 dofile_once("mods/world_radar/files/utility/spell.lua")
 -- luacheck: globals card_get_spell wand_get_spells spell_get_name
+dofile_once("mods/world_radar/files/utility/treasure_chest.lua")
+-- luacheck: globals chest_get_rewards
 
 --[[ Panel class with default values.
 --

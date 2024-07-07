@@ -46,11 +46,11 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
         local reward = {type=nil, name=nil, entity=nil, amount=nil}
         if rnd <= 7 then -- Bomb
             reward.type = "entity"
-            reward.name = "bomb"
+            reward.name = "$action_bomb"
             reward.entity = "data/entities/projectiles/bomb_small.xml"
         elseif rnd <= 40 then -- Gold
             reward.type = "item"
-            reward.name = "gold"
+            reward.name = "$item_goldnugget"
             reward.amount = 0
 
             local amount = 5
@@ -89,21 +89,21 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
             rnd = Random(0, 100)
             if rnd <= 94 then
                 reward.type = "potion"
-                reward.name = "potion"
+                reward.name = "$item_potion"
                 reward.entity = "data/entities/items/pickup/potion.xml"
             elseif rnd <= 98 then
                 reward.type = "pouch"
-                reward.name = "powder stash"
+                reward.name = "$item_powder_stash_3"
                 reward.entity = "data/entities/items/pickup/powder_stash.xml"
             elseif rnd <= 100 then
                 rnd = Random(0, 100)
                 if rnd <= 98 then
                     reward.type = "potion"
-                    reward.name = "secret potion"
+                    reward.name = "$item_potion (secret material)"
                     reward.entity = "data/entities/items/pickup/potion_secret.xml"
                 elseif rnd <= 100 then
                     reward.type = "potion"
-                    reward.name = "random material potion"
+                    reward.name = "$item_potion (random material)"
                     reward.entity = "data/entities/items/pickup/potion_random_material.xml"
                 end
             end
@@ -111,11 +111,11 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
             rnd = Random(0, 100)
             if rnd <= 98 then
                 reward.type = "item"
-                reward.name = "spell refresh"
+                reward.name = "$item_spell_refresh"
                 reward.entity = "data/entities/items/pickup/spell_refresh.xml"
             else
                 reward.type = "entity"
-                reward.name = "spell refresh mimic"
+                reward.name = "$animal_shaman_wind (spell refresh mimic)"
                 reward.entity = "data/entities/animals/illusions/shaman_wind.xml"
             end
         elseif rnd <= 60 then -- Misc items
@@ -136,15 +136,15 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
                 if flag_status then
                     reward.type = "item"
                     if GameHasFlagRun("greed_curse") and not GameHasFlagRun("greed_curse_gone") then
-                        reward.name = "greed die"
+                        reward.name = "$item_greed_die"
                         reward.entity = "data/entities/items/pickup/physics_greed_die.xml"
                     else
-                        reward.name = "die"
+                        reward.name = "$item_die"
                         reward.entity = "data/entities/items/pickup/physics_die.xml"
                     end
                 else
                     reward.type = "potion"
-                    reward.name = "potion"
+                    reward.name = "$item_potion (via die fallback)"
                     reward.entity = "data/entities/items/pickup/potion.xml"
                 end
             elseif opt == "runestone" then
@@ -152,19 +152,19 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
                 rnd = Random(1, #r_opts)
                 local r_opt = r_opts[rnd]
                 reward.type = "item"
-                reward.name = r_opt .. " runestone"
+                reward.name = "$item_runestone_" .. r_opt
                 reward.entity = "data/entities/items/pickup/runestones/runestone_" .. r_opt .. ".xml"
             elseif opt == "orb" then
                 reward.type = "item"
-                reward.name = "shiny orb"
+                reward.name = "$item_gold_orb"
                 reward.entity = "data/entities/items/pickup/physics_gold_orb.xml"
                 if GameHasFlagRun("greed_curse") and not GameHasFlagRun("greed_curse_gone") then
-                    reward.name = "greedy shiny orb"
+                    reward.name = "$item_gold_orb_greed"
                     reward.entity = "data/entities/items/pickup/physics_gold_orb_greed.xml"
                 end
             else
                 reward.type = "item"
-                reward.name = string.match(opt, "([^/]*)%.xml$")
+                reward.name = "$item_" .. string.match(opt, "([^/]*)%.xml$")
                 reward.entity = opt
             end
         elseif rnd <= 65 then -- Random spell card
@@ -195,53 +195,52 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
             end
         elseif rnd <= 84 then -- Wand
             rnd = Random(0,100)
-
             reward.type = "wand"
             if rnd <= 25 then
-                reward.name = "level 1 wand"
+                reward.name = "$item_wand (level 1)"
                 reward.entity = "data/entities/items/wand_level_01.xml"
             elseif rnd <= 50 then
-                reward.name = "level 1 wand (unshuffle)"
+                reward.name = "$item_wand (level 1) (unshuffle)"
                 reward.entity = "data/entities/items/wand_unshuffle_01.xml"
             elseif rnd <= 75 then
-                reward.name = "level 2 wand"
+                reward.name = "$item_wand (level 2)"
                 reward.entity = "data/entities/items/wand_level_02.xml"
             elseif rnd <= 90 then
-                reward.name = "level 2 wand (unshuffle)"
+                reward.name = "$item_wand (level 2) (unshuffle)"
                 reward.entity = "data/entities/items/wand_unshuffle_02.xml"
             elseif rnd <= 96 then
-                reward.name = "level 3 wand"
+                reward.name = "$item_wand (level 3)"
                 reward.entity = "data/entities/items/wand_level_03.xml"
             elseif rnd <= 98 then
-                reward.name = "level 3 wand (unshuffle)"
+                reward.name = "$item_wand (level 3) (unshuffle)"
                 reward.entity = "data/entities/items/wand_unshuffle_03.xml"
             elseif rnd <= 99 then
-                reward.name = "level 4 wand"
+                reward.name = "$item_wand (level 4)"
                 reward.entity = "data/entities/items/wand_level_04.xml"
             elseif rnd <= 100 then
-                reward.name = "level 4 wand (unshuffle)"
+                reward.name = "$item_wand (level 4) (unshuffle)"
                 reward.entity = "data/entities/items/wand_unshuffle_04.xml"
             end
         elseif rnd <= 95 then -- Heart
             rnd = Random(0, 100)
             reward.type = "item"
             if rnd <= 88 then
-                reward.name = "heart"
+                reward.name = "$item_heart"
                 reward.entity = "data/entities/items/pickup/heart.xml"
             elseif rnd <= 89 then
                 reward.type = "entity"
-                reward.name = "heart mimic"
+                reward.name = "$animal_dark_alchemist (heart mimic)"
                 reward.entity = "data/entities/animals/illusions/dark_alchemist.xml"
             elseif rnd <= 99 then
-                reward.name = "better heart"
+                reward.name = "$item_heart_better"
                 reward.entity = "data/entities/items/pickup/heart_better.xml"
             else
-                reward.name = "full heal"
+                reward.name = "$item_heart_fullhp"
                 reward.entity = "data/entities/items/pickup/heart_fullhp.xml"
             end
         elseif rnd <= 98 then -- Converts the chest to gold
             reward.type = "gold"
-            reward.name = "convert to gold"
+            reward.name = "convert to $mat_gold"
         elseif rnd <= 99 then -- Add 2 to the reward count
             count = count + 2
             reward.type = "reroll"

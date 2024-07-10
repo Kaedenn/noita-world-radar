@@ -7,6 +7,8 @@ TODO: Add icons to the nearby item list
 
 TODO: Add "include all unknown spells" button
 TODO: Add ability to ignore always-cast spells
+    bool = ComponentGetValue2(ItemComponent, "permanently_attached")
+    ix, iy = ComponentGetValue2(ItemComponent, "inventory_slot")
 
 TODO: Add treasure chest prediction
 
@@ -1329,16 +1331,14 @@ function InfoPanel:_process_remove_entries()
 
         local to_remove = {}
         for idx, entry in ipairs(self.env.spell_list) do
-            local min_keep = 0
-            if entry.config and entry.config.keep then
-                if type(entry.config.keep) == "boolean" then
-                    min_keep = math.huge
-                elseif type(entry.config.keep) == "number" then
-                    min_keep = entry.config.keep
-                end
-            end
             if inv_spell_map[entry.id] then
-                if inv_spell_map[entry.id] > min_keep then
+                local want_remove = true
+                if entry.config and entry.config.keep then
+                    if entry.config.keep ~= 0 then
+                        want_remove = false
+                    end
+                end
+                if want_remove then
                     table.insert(to_remove, 1, idx)
                 end
             end

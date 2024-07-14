@@ -85,7 +85,7 @@ function OnWorldPostUpdate()
         if imgui.Begin("World Radar###world_radar", nil, bit.bor(
             --imgui.WindowFlags.NoFocusOnAppearing,
             --imgui.WindowFlags.NoNavInputs,
-            --imgui.WindowFlags.HorizontalScrollbar,
+            imgui.WindowFlags.HorizontalScrollbar,
             imgui.WindowFlags.MenuBar
             ))
         then

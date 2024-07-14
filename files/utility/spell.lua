@@ -21,10 +21,25 @@ function wand_get_spells(entity)
     for _, card in ipairs(cards) do
         local spell = card_get_spell(card)
         if spell ~= nil then
-            table.insert(spells, spell)
+            table.insert(spells, {card, spell})
         end
     end
     return spells
+end
+
+--[[ True if the spell is an Always Cast ]]
+function spell_is_always_cast(spell)
+    local icomps = EntityGetComponentIncludingDisabled(spell, "ItemComponent")
+    if not icomps or #icomps < 1 then
+        print_error(("Entity %s lacks ItemComponent"):format(tostring(spell)))
+        return nil
+    end
+    for _, icomp in ipairs(icomps) do
+        local is_ac = ComponentGetValue2(icomp, "permanently_attached")
+        -- local ix, iy = ComponentGetValue2(icomp, "inventory_slot")
+        if is_ac then return true end
+    end
+    return false
 end
 
 --[[ Obtain the spell table for the given spell ID ]]

@@ -1,16 +1,15 @@
 --[[
 The "Info" Panel: Display interesting information
 
-TODO: Only display the primary biome of a biome group
-
 TODO: Add icons to the nearby item list
 
+TODO: Add toggle for item/spell/enemy radar for matched entries
+
 TODO: Add "include all unknown spells" button
-TODO: Add ability to ignore always-cast spells
-    bool = ComponentGetValue2(ItemComponent, "permanently_attached")
-    ix, iy = ComponentGetValue2(ItemComponent, "inventory_slot")
 
 TODO: Add treasure chest prediction
+
+TODO: Only display the primary biome of a biome group
 
 TODO: Add "show triggers" (eg. temple collapse) via barrier spell effect
 
@@ -29,7 +28,7 @@ dofile_once("mods/world_radar/files/utility/entity.lua")
 dofile_once("mods/world_radar/files/utility/material.lua")
 -- luacheck: globals container_get_contents material_get_icon generate_material_tables
 dofile_once("mods/world_radar/files/utility/spell.lua")
--- luacheck: globals card_get_spell wand_get_spells spell_get_name
+-- luacheck: globals card_get_spell wand_get_spells spell_is_always_cast spell_get_name
 dofile_once("mods/world_radar/files/utility/treasure_chest.lua")
 -- luacheck: globals chest_get_rewards
 
@@ -181,7 +180,7 @@ local function player_has_spell(spell_id)
     return false
 end
 
---[[ Draw an image using imgui ]]
+--[[ Draw an image using imgui (TODO: document image table structure) ]]
 function InfoPanel:_draw_image(imgui, image, rescale, end_line)
     local path = image
     local width, height = 0, 0
@@ -319,12 +318,16 @@ function InfoPanel:_get_spell_by_name(sid, sname)
     local spell_name = sname:gsub("^%$", "")
     local spell_id = sid:upper()
     for _, entry in ipairs(self:_get_spell_list()) do
+        local spinfo = {
+            id = entry.id,
+            name = entry.name,
+            icon = entry.sprite
+        }
         if entry.id == spell_id or entry.name == spell_name then
-            return {
-                id = entry.id,
-                name = entry.name,
-                icon = entry.sprite
-            }
+            return spinfo
+        end
+        if entry.path == sid or entry.path == sname then
+            return spinfo
         end
     end
     self.host:print(("Could not locate spell %q %q"):format(sid, sname))
@@ -336,6 +339,9 @@ function InfoPanel:_get_material_by_name(mname)
     if self.env.material_cache and #self.env.material_cache > 0 then
         for _, entry in ipairs(self.env.material_cache) do
             if entry.name == mname then
+                return entry
+            end
+            if mname == entry.path then
                 return entry
             end
         end
@@ -368,6 +374,9 @@ function InfoPanel:_get_entity_by_name(ename)
         if ename == entry.id or ename == entry.name then
             return entry
         end
+        if ename == entry.path then
+            return entry
+        end
     end
     return {}
 end
@@ -376,6 +385,9 @@ end
 function InfoPanel:_get_item_by_name(iname)
     for _, entry in ipairs(self:_get_item_list()) do
         if iname == entry.id or iname == entry.name then
+            return entry
+        end
+        if iname == entry.path then
             return entry
         end
     end
@@ -436,7 +448,7 @@ function InfoPanel:_find_items()
         for _, entry in ipairs(self.env.item_list) do
             local iname = entry.name
             if name:match(iname) or name:match(GameTextGet(iname)) then
-                table.insert(items, {entity=entity, name=name})
+                table.insert(items, {entity=entity, name=name, entry=entry})
             end
         end
     end
@@ -481,13 +493,19 @@ function InfoPanel:_find_spells()
     self.env.wand_matches = {}
     for _, entry in ipairs(get_with_tags({"wand"}, {no_player=true})) do
         local entid = entry[1]
-        for _, spell in ipairs(wand_get_spells(entid)) do
-            if spell_table[spell] ~= nil then
-                if not self.env.wand_matches[entid] then
-                    self.env.wand_matches[entid] = {}
-                end
-                self.env.wand_matches[entid][spell] = true
+        for _, spell_info in ipairs(wand_get_spells(entid)) do
+            local spell_id, spell = unpack(spell_info)
+            local spinfo = spell_table[spell]
+            if not spinfo then goto continue end
+            local spconfig = spinfo.config or {}
+            if spconfig.ignore_ac == 1 and spell_is_always_cast(spell_id) then
+                goto continue
             end
+            if not self.env.wand_matches[entid] then
+                self.env.wand_matches[entid] = {}
+            end
+            self.env.wand_matches[entid][spell] = true
+            ::continue::
         end
     end
 
@@ -496,9 +514,13 @@ function InfoPanel:_find_spells()
         local entid = entry[1]
         local spell = card_get_spell(entid)
         local parent = EntityGetParent(entid)
+        -- XXX: Should we just ignore all spells inside wands?
         if not self.env.wand_matches[parent] then
             if spell and spell_table[spell] then
-                self.env.card_matches[entid] = true
+                local spconfig = spell_table[spell].config or {}
+                if spconfig.ignore_ac ~= 1 or not spell_is_always_cast(entid) then
+                    self.env.card_matches[entid] = true
+                end
             end
         end
     end
@@ -581,7 +603,14 @@ function InfoPanel:_update_table(data, name)
             modified = true
         end
         if name == "spells" then
-            -- Nothing to do yet
+            if not tbl_entry.config.keep then
+                tbl_entry.config.keep = 0
+                modified = true
+            end
+            if not tbl_entry.config.ignore_ac then
+                tbl_entry.config.ignore_ac = 0
+                modified = true
+            end
         elseif name == "materials" then
             if not tbl_entry.tags then
                 tbl_entry.tags = CellFactory_GetTags(tbl_entry.id)
@@ -965,7 +994,10 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                         id = entry.id,
                         name = entry.name,
                         icon = entry.icon,
-                        config = {},
+                        config = {
+                            keep = 0,
+                            ignore_ac = 0,
+                        },
                     }
                     if player_has_spell(entry.id) then
                         new_entry.config.keep = 1
@@ -990,20 +1022,23 @@ function InfoPanel:_draw_spell_list(imgui)
     if imgui.BeginChild("Spell List###spell_list", 0, 0, true, flags) then
         for idx, entry in ipairs(self.env.spell_list) do
             if not entry.config then entry.config = {} end
-            local keep = entry.config.keep == 1
             if imgui.SmallButton("Remove###remove_" .. entry.id) then
                 to_remove = idx
             end
             imgui.SameLine()
+            local keep = entry.config.keep == 1
             ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
             if ret then
-                if keep then
-                    entry.config.keep = 1
-                else
-                    entry.config.keep = 0
-                end
+                entry.config.keep = keep and 1 or 0
             end
             self:_draw_hover_tooltip(imgui, "If checked, do not remove this spell upon pickup")
+            imgui.SameLine()
+            local ignore_ac = entry.config.ignore_ac == 1
+            ret, ignore_ac = imgui.Checkbox("###ignore_ac_" .. entry.id, ignore_ac)
+            if ret then
+                entry.config.ignore_ac = ignore_ac and 1 or 0
+            end
+            self:_draw_hover_tooltip(imgui, "If checked, do not match if the spell is an Always Cast spell")
             imgui.SameLine()
             if entry.icon and self.config.show_images then
                 self:_draw_image(imgui, entry.icon, true, false)
@@ -1317,7 +1352,6 @@ end
 function InfoPanel:_process_remove_entries()
     local remove_spell = ModSettingGet(self.conf.remove_spell)
     if remove_spell then
-        -- Obtain table of spells currently in inventory
         local inv_cards = get_with_tags({"card_action"}, {player=true})
         local inv_spell_map = {}
         for _, entpair in ipairs(inv_cards) do
@@ -1348,9 +1382,13 @@ function InfoPanel:_process_remove_entries()
             for _, idx in ipairs(to_remove) do
                 table.remove(self.env.spell_list, idx)
             end
-            self.host:print(("Removed %d spell(s) from the spell list"):format(#to_remove))
+            self.host:print(("Removed %d spell%s from the spell list"):format(
+                #to_remove,
+                #to_remove ~= 1 and "s" or ""))
         end
     end
+
+    -- TODO: Process remove for items?
 
     local remove_material = ModSettingGet(self.conf.remove_material)
     if remove_material then
@@ -1383,7 +1421,9 @@ function InfoPanel:_process_remove_entries()
             for _, idx in ipairs(to_remove) do
                 table.remove(self.env.material_list, idx)
             end
-            self.host:print(("Removed %d material(s) from the material list"):format(#to_remove))
+            self.host:print(("Removed %d material%s from the material list"):format(
+                #to_remove,
+                #to_remove ~= 1 and "s" or ""))
         end
     end
 end
@@ -1473,14 +1513,33 @@ function InfoPanel:draw(imgui)
         self.host:p(self.host.separator)
         for _, entry in ipairs(aggregate(self:_get_items())) do
             local name, entities = unpack(entry)
-            -- TODO: Determine and display item icon
-            local line = ("%dx %s"):format(#entities, name)
+            local entname = EntityGetName(entities[1])
+            if not entname or entname == "" then
+                entname = EntityGetFilename(entities[1])
+            end
+            local iinfo = self:_get_item_by_name(entname)
+            if iinfo then
+                self.host:d(smallfolk.dumps({name, entname, entities, iinfo}))
+            end
+            local icon = iinfo and iinfo.icon or nil
+            local line = {
+                ("%dx"):format(#entities),
+                {
+                    name,
+                    image = icon,
+                }
+            }
             self.host:p(line)
 
             for _, entity in ipairs(entities) do
                 local ex, ey = EntityGetTransform(entity)
                 local contents = {}
-                line = ("%s %d at {%d,%d}"):format(name, entity, ex, ey)
+                line = {
+                    {
+                        ("%s %d at {%d,%d}"):format(name, entity, ex, ey),
+                        image = icon,
+                    }
+                }
                 local div = 10
                 if EntityHasTag(entity, "powder_stash") then
                     div = 15
@@ -1490,9 +1549,10 @@ function InfoPanel:draw(imgui)
                     table.insert(contents, ("%s %d%%"):format(matname, amount/div))
                 end
                 if #contents > 0 then
-                    line = line .. " with " .. table.concat(contents, ", ")
+                    table.insert(line, "with")
+                    table.insert(line, table.concat(contents, ", "))
                 elseif EntityHasTag(entity, "potion") then
-                    line = line .. " empty"
+                    table.insert(line, "empty")
                 end
                 self.host:d(line)
             end
@@ -1551,6 +1611,7 @@ function InfoPanel:draw(imgui)
         self:_find_spells()
         for entid, ent_spells in pairs(self.env.wand_matches) do
             local spell_list = {}
+            -- TODO: Add wand image?
             for spell, _ in pairs(ent_spells) do
                 local spell_name = spell_get_name(spell)
                 if spell_name:match("^%$") then
@@ -1559,6 +1620,7 @@ function InfoPanel:draw(imgui)
                 local name = ("%s [%s]"):format(spell_name, spell)
                 table.insert(spell_list, name)
             end
+            -- TODO: Add icon to spells
             local spells = table.concat(spell_list, ", ")
             self.host:p(("Wand with %s detected nearby!!"):format(spells))
             local wx, wy = EntityGetTransform(entid)

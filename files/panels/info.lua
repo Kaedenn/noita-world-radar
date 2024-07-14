@@ -1518,7 +1518,7 @@ function InfoPanel:draw(imgui)
                 entname = EntityGetFilename(entities[1])
             end
             local iinfo = self:_get_item_by_name(entname)
-            if iinfo then
+            if self.env.do_debug then
                 self.host:d(smallfolk.dumps({name, entname, entities, iinfo}))
             end
             local icon = iinfo and iinfo.icon or nil

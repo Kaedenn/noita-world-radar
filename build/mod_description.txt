@@ -14,15 +14,20 @@ The UI includes the following key features:
 * The ability to configure the enemy search list.
 * The ability to configure the material (flask or pouch contents) search list.
 * The ability to configure the item search list.
+* Spells and materials can be auto-removed as soon as you obtain them. For spells, this is enabled by default. For materials, it's disabled by default. This can be changed either in the mod settings or in the drop-down menu.
+* New! You can mark each individual spell to ignore always-cast. For instance, if you're looking for Add Mana, you can ignore wands that always cast Add Mana.
 
 There are three levels of configuration:
 1. Default lists: this mod comes pre-bundled with appropriate pre-selected entries for enemies, materials, and items. See below for the exact lists.
-2. Per-run lists: changes to the lists are saved per-run. If you start a new run, these changes are lost.
-3. Persistent lists: changes can be saved forever so that they're loaded at the start of every run.
+2. Persistent lists: changes can be saved forever so that they're loaded at the start of every run. This overrides the default list.
+3. Per-run lists: changes to the lists are saved per-run. If you start a new run, these changes are lost. This overrides both the default and persistent lists.
 
 Planned features are as follows:
+* Ability to predict the drops of normal treasure chests and include those in the nearby spells/items/materials lists.
+* Default spell list. Currently this will include Add Mana, Circle of Vigor, and Long Distance Cast.
 * Option to add all spells you have yet to unlock to the search list.
-* Option to automatically remove spells from the search list as you pick them up.
+* Option to restrict spells to require always-cast instead of prohibit it.
+* Option to add a radar (like the item/wand/enemy radar perks) that will point you towards the found object(s).
 
 This mod is how I found my first ever Greater Treasure Chest and my latest Healthium flask.
 

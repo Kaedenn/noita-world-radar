@@ -36,6 +36,13 @@ mod_settings = {
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
             {
+                id = "remove_found_item",
+                ui_name = "Remove Item on Pickup",
+                ui_description = "Remove an item from the scanner list when you pick up the item.",
+                value_default = false,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            {
                 id = "remove_found_material",
                 ui_name = "Remove Material on Pickup",
                 ui_description = "Remove a material from the scanner list when you pick up the material.",
@@ -52,7 +59,7 @@ mod_settings = {
             {
                 id = "show_images",
                 ui_name = "Show Images",
-                ui_description = "Show image next to spell, item, and enemy entries.",
+                ui_description = "Show images with the text.",
                 value_default = true,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
@@ -63,6 +70,20 @@ mod_settings = {
                 value_default = true,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
+            {
+                id = "show_closed",
+                ui_name = "Show When Closed",
+                ui_description = "Show on-screen text even if the UI is disabled.",
+                value_default = false,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            {
+                id = "show_radar",
+                ui_name = "Show Indicators",
+                ui_description = "Show indicator sprites around the player that point to the found item. Works similar to the Enemy/Item/Wand Radar perks.",
+                value_default = true,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            }
         },
     },
 }

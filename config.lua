@@ -4,14 +4,16 @@ dofile_once("data/scripts/lib/mod_settings.lua")
 MOD_ID = "world_radar"
 
 CONF = {
-    ENABLE = "enable",      -- should the UI be drawn?
-    DEBUG = "debug",        -- is debugging enabled?
+    ENABLE = "enable",
+    DEBUG = "debug",
+    REMOVE_SPELL = "remove_found_spell",
+    REMOVE_ITEM = "remove_found_item",
+    REMOVE_MATERIAL = "remove_found_material",
+    SHOW_IMAGES = "show_images",
+    SHOW_COLOR = "color",
+    SHOW_CLOSED = "show_closed",
+    SHOW_RADAR = "show_radar",
 }
-
-function f_enable(curr_value)
-    if curr_value then return "Disable" end
-    return "Enable"
-end
 
 function conf_get(key)
     return ModSettingGet(MOD_ID .. "." .. key)

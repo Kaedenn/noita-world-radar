@@ -32,12 +32,58 @@
 -- Panels are allowed to have whatever else they desire in their panel table.
 --]]
 
--- luacheck: globals MOD_ID CONF conf_get conf_set
+--[[ Line Format
+The Panel class supports fairly complex layout for printing lines using the
+Panel:p() and Panel:d() functions. A line is either a string or a table of
+line fragments. Each line fragment can be either a string or another table.
+The following values are understood for line fragments; all attributes are
+optional:
+  level: string       used to determine color and displayed as a prefix
+  color: string       one of Panel.colors; or:
+  color: {r, g, b}    values between [0, 1], alpha = 1; or:
+  color: {r, g, b, a} values between [0, 1]
+  image: string       path to a PNG image file
+  width: number       override width of the image in pixels
+  height: number      override height of the image in pixels
+  wrapped_text: string    display text wrapped to the container
+  separator_text: string  display text with a separator
+  label_text: string      display text as a label
+  bullet_text: string     display text with a bullet
+  button: table       add a button to the left of the entry
+    .text: string     button text (default: "Button")
+    .id: string       optional button ID, if button.text lacks one
+    .func: function   function called if the button is clicked
+    .small: boolean   if true, creates a small button
+    [i]: any          applied to the function as arguments
+
+The indexed values (fragment[1], fragment[2], etc) can be zero or more of the
+following:
+  string              displayed as is
+  Line                processed as above with results on one line
+  LineFragment        processed as above with results on one line
+
+The following labels are understood:
+  "debug"             color={0.9, 0.9, 0}, near-yellow
+  "warning"           color={1.0, 0.5, 0.5}, light-red
+
+When displaying images via Line.image, the width and height keys can be used
+to override the image width and height. For instance:
+  {"mods/mymod/files/myimage.png", height=20}
+will display the image using its actual width but with a height of 20 pixels
+Proportional scaling and min/max sizes are not (yet?) supported.
+
+Button functions are called as follows:
+  button_func(unpack(button_args), panel, imgui)
+where panel is the host Panel instance and imgui is the current ImGui object.
+
+Panel.separator is a special Line that prints a horizontal separator, used
+as follows:
+  host:p(host.separator)
+--]]
 
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("mods/world_radar/config.lua")
-
--- TODO: Document Line table layout (host:p, host:d)
+-- luacheck: globals MOD_ID CONF conf_get conf_set
 
 --[[ Template object with default values for the Panel class ]]
 Panel = {
@@ -54,7 +100,8 @@ Panel = {
 
     colors = {          -- text color configuration
         enable = true,
-        debug = {0.9, 0.9, 0.0},
+        debug = {0.9, 0.9, 0.0}, -- near-yellow
+        warning = {1.0, 0.5, 0.5}, -- light red
 
         names = {
             -- Pure colors
@@ -68,14 +115,14 @@ Panel = {
             black = {0, 0, 0},
 
             -- Blended colors
-            red_light = {1, 0.5, 0.5},
-            green_light = {0.5, 1, 0.5},
-            blue_light = {0.5, 0.5, 1},
-            cyan_light = {0.5, 1, 1},
-            magenta_light = {1, 0.5, 1},
-            yellow_light = {1, 1, 0.5},
+            red_light = {1, 0.5, 0.5}, lightred = {1, 0.5, 0.5},
+            green_light = {0.5, 1, 0.5}, lightgreen = {0.5, 1, 0.5},
+            blue_light = {0.5, 0.5, 1}, lightblue = {0.5, 0.5, 1},
+            cyan_light = {0.5, 1, 1}, lightcyan = {0.5, 1, 1},
+            magenta_light = {1, 0.5, 1}, lightmagenta = {1, 0.5, 1},
+            yellow_light = {1, 1, 0.5}, lightyellow = {1, 1, 0.5},
+            gray_light = {0.75, 0.75, 0.75}, lightgray = {0.75, 0.75, 0.75},
             gray = {0.5, 0.5, 0.5},
-            lightgray = {0.75, 0.75, 0.75},
         },
     },
 
@@ -393,9 +440,9 @@ function Panel:build_menu(imgui)
 end
 
 --[[ Private: draw a line to the feedback box ]]
-function Panel:_draw_line(imgui, line, show_images, show_color)
-    if show_images == nil then show_images = true end
-    if show_color == nil then show_color = true end
+function Panel:draw_line(imgui, line, show_images, show_color)
+    if show_images == nil then show_images = conf_get(CONF.SHOW_IMAGES) end
+    if show_color == nil then show_color = conf_get(CONF.SHOW_COLOR) end
     if type(line) == "table" then
         local level = line.level or nil
         local color = line.color or nil
@@ -403,19 +450,73 @@ function Panel:_draw_line(imgui, line, show_images, show_color)
             color = self.colors[level] or nil
         end
 
+        -- Display "time remaining" as a simple percentage
+        if line.duration and line.max_duration then
+            local pct = math.min(math.floor(line.duration / line.max_duration * 100), 99)
+            local prefix = ("%02d"):format(pct)
+            imgui.SetNextItemWidth(10)
+            imgui.TextDisabled(prefix)
+            imgui.SameLine()
+        end
+
+        local pushed_color = false
         if color ~= nil and show_color then
             if type(color) == "string" then
                 color = self.colors.names[color] or {1, 1, 1}
             end
             imgui.PushStyleColor(imgui.Col.Text, unpack(color))
+            pushed_color = true
         end
 
         if line.image and show_images then
             local img = imgui.LoadImage(line.image)
             if img then
-                imgui.Image(img, line.width or img.width, line.height or img.height)
+                local iwidth = line.width or img.width
+                local iheight = line.height or img.height
+                imgui.Image(img, iwidth, iheight)
                 imgui.SameLine()
             end
+        end
+
+        if line.button then
+            local btext = line.button.text or "Button"
+            local bid = line.button.id or ""
+            local bfunc = line.button.func or function() end
+            local blabel = btext
+            if bid ~= "" then
+                blabel = ("%s###%s"):format(btext, bid)
+            end
+
+            local ret
+            if line.button.small then
+                ret = imgui.SmallButton(blabel)
+            else
+                ret = imgui.Button(blabel)
+            end
+            imgui.SameLine()
+
+            if ret then
+                local bargs = {unpack(line.button)}
+                table.insert(bargs, self)
+                table.insert(bargs, imgui)
+                bfunc(unpack(bargs))
+            end
+        end
+
+        if type(line.wrapped_text) == "string" then
+            imgui.TextWrapped(line.wrapped_text)
+        end
+
+        if type(line.separator_text) == "string" then
+            imgui.SeparatorText(line.separator_text)
+        end
+
+        if type(line.label_text) == "string" then
+            imgui.LabelText(line.label_text)
+        end
+
+        if type(line.bullet_text) == "string" then
+            imgui.BulletText(line.bullet_text)
         end
 
         for idx, token in ipairs(line) do
@@ -424,9 +525,9 @@ function Panel:_draw_line(imgui, line, show_images, show_color)
                 imgui.Text(("%s:"):format(level))
                 imgui.SameLine()
             end
-            self:_draw_line(imgui, token, show_images, show_color)
+            self:draw_line(imgui, token, show_images, show_color)
         end
-        if color ~= nil and show_color then
+        if pushed_color then
             imgui.PopStyleColor()
         end
     elseif line == self.separator then
@@ -468,10 +569,10 @@ function Panel:draw(imgui)
         if current.on_draw_post then current:on_draw_post(imgui) end
     end
 
-    local show_images = ModSettingGet(MOD_ID .. ".show_images")
-    local show_color = ModSettingGet(MOD_ID .. ".color")
+    local show_images = conf_get(CONF.SHOW_IMAGES)
+    local show_color = conf_get(CONF.SHOW_COLOR)
     for _, line in ipairs(self.lines) do
-        self:_draw_line(imgui, line, show_images, show_color)
+        self:draw_line(imgui, line, show_images, show_color)
     end
 end
 

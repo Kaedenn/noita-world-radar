@@ -15,7 +15,9 @@
 dofile_once("data/scripts/lib/mod_settings.lua")
 
 dofile_once("mods/world_radar/config.lua")
+-- luacheck: globals MOD_ID CONF conf_get
 dofile_once("mods/world_radar/files/utility/material.lua")
+-- luacheck: globals generate_material_tables
 
 MaterialTables = {}
 KPanelLib = dofile("mods/world_radar/files/panel.lua")
@@ -69,19 +71,20 @@ function OnWorldPostUpdate()
         imgui = load_imgui({version="1.14.2", mod=MOD_ID})
     end
 
-    if conf_get(CONF.ENABLE) then
-        if not KPanel then
-            KPanel = KPanelLib:new()
-        end
-        if not KPanel then
-            GamePrint("Failed KPanel:new()")
-        elseif not KPanel.init then
-            GamePrint("Failed KPanel:new(); init not defined")
-        elseif not KPanel.initialized then
-            KPanel:init(nil, {["materials"]=MaterialTables})
-            KPanel:set("info")
-        end
+    if not KPanel then
+        KPanel = KPanelLib:new()
+    end
+    if not KPanel then
+        GamePrint("Failed KPanel:new()")
+    elseif not KPanel.init then
+        GamePrint("Failed KPanel:new(); init not defined")
+    elseif not KPanel.initialized then
+        KPanel:init(nil, {["materials"]=MaterialTables})
+        KPanel:set("info")
+    end
 
+    local show_closed = conf_get(CONF.SHOW_CLOSED)
+    if conf_get(CONF.ENABLE) then
         if imgui.Begin("World Radar###world_radar", nil, bit.bor(
             --imgui.WindowFlags.NoFocusOnAppearing,
             --imgui.WindowFlags.NoNavInputs,
@@ -98,6 +101,8 @@ function OnWorldPostUpdate()
         elseif KPanel then
             KPanel:draw_closed(imgui)
         end
+    elseif show_closed then
+        KPanel:draw_closed(imgui)
     end
 
 end

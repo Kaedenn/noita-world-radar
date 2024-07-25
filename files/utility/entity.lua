@@ -66,14 +66,18 @@ end
 --[[ Get the display string for an enemy entity ]]
 function enemy_get_name(entity)
     local name = EntityGetName(entity)
+    local path = EntityGetFilename(entity)
+    return animal_build_name(name, path)
+end
+
+--[[ Format the display name for the given animal ]]
+function animal_build_name(name, path)
     local locname = name
     if name ~= "" and name:match("^[$][%a]+_[%a%d_]+$") then
         locname = GameTextGet(name)
         if locname == "" then locname = name end
         name = name:gsub("^[$][%a]+_", "") -- strip "$animal_" prefix
     end
-
-    local path = EntityGetFilename(entity)
     local label = path:gsub("^[%a_/]+/([%a%d_]+).xml", "%1") -- basename
     if path:match("data/entities/animals/([%a_]+)/([%a%d_]+).xml") then
         label = path:gsub("data/entities/animals/([%a_]+)/([%a%d_]+).xml",
@@ -82,8 +86,7 @@ function enemy_get_name(entity)
                     return dirname
                 end
                 return ("%s (%s)"):format(basename, dirname)
-            end
-        )
+            end)
     elseif path:match("data/entities/animals/([%a%d_]+).xml") then
         label = path:gsub("data/entities/animals/([%a%d_]+).xml", "%1")
     end

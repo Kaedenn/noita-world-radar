@@ -2,6 +2,9 @@
 -- Spell-and-wand-related helper functions
 --]]
 
+dofile_once("data/scripts/gun/gun_enums.lua")
+-- luacheck: globals ACTION_TYPE_PROJECTILE ACTION_TYPE_STATIC_PROJECTILE ACTION_TYPE_MODIFIER ACTION_TYPE_DRAW_MANY ACTION_TYPE_MATERIAL ACTION_TYPE_OTHER ACTION_TYPE_UTILITY ACTION_TYPE_PASSIVE
+
 local spell_cache = nil
 
 --[[ Get the spell for the given card ]]
@@ -62,6 +65,20 @@ end
 function spell_get_name(spell)
     local action = spell_get_data(spell)
     return action.name
+end
+
+--[[ Obtain the display name for the given action ]]
+function action_lookup(action)
+    local action_types = {}
+    action_types[ACTION_TYPE_PROJECTILE]  = "PROJECTILE"
+    action_types[ACTION_TYPE_STATIC_PROJECTILE] = "STATIC_PROJECTILE"
+    action_types[ACTION_TYPE_MODIFIER]    = "MODIFIER"
+    action_types[ACTION_TYPE_DRAW_MANY]   = "DRAW_MANY"
+    action_types[ACTION_TYPE_MATERIAL]    = "MATERIAL"
+    action_types[ACTION_TYPE_OTHER]       = "OTHER"
+    action_types[ACTION_TYPE_UTILITY]     = "UTILITY"
+    action_types[ACTION_TYPE_PASSIVE]     = "PASSIVE"
+    return action_types[action] or "invalid"
 end
 
 -- vim: set ts=4 sts=4 sw=4:

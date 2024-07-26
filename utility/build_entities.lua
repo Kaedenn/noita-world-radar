@@ -25,6 +25,7 @@ package.path = package.path .. ";" .. table.concat({
 
 io = require 'io'
 
+-- luacheck: globals minifs read_file read_lines find_with_extension
 require 'lib.filesystem' -- exports minifs
 kae = require 'lib.libkae'
 logger = require 'lib.logging'

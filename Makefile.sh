@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Trivial "Makefile-like" script for deploying this mod
+# "Makefile-like" script for deploying this mod
 
 # Ideas:
 # Configure tar (backup) command-line arguments
@@ -22,6 +22,8 @@ options:
     -v      enable verbose diagnostics
     -V      enable verbose diagnostics and set -x
     -n      dry run; don't actually do anything
+    -l PATH path to luacheck.sh script
+    -L ARG  pass ARG to luacheck command line
     -b DIR  backup destination into DIR/ before overwriting
     -C      disable color formatting
     -F      copy items even if there are no detected differences
@@ -34,16 +36,19 @@ environment variables:
 EOF
 }
 
+declare -a LUACHECK_ARGS=()
 NOITA_PATH="${NOITA:-}"
 declare -a DIFF_ARGS=()
 
-while getopts "hvVnb:CFN:a:" arg; do
+while getopts "hvVnl:L:b:CFN:a:" arg; do
   case "$arg" in
     h) print_usage; exit 0;;
     v) DEBUG=1;;
     V) DEBUG=1; set -x;;
     b) BACKUP="$OPTARG";;
     n) DRY_RUN=1;;
+    l) LUACHECK="$OPTARG";;
+    L) LUACHECK_ARGS+=("$OPTARG");;
     C) NOCOLOR=1;;
     F) FORCE_COPY=1;;
     N) NOITA_PATH="$OPTARG";;
@@ -51,6 +56,13 @@ while getopts "hvVnb:CFN:a:" arg; do
   esac
 done
 shift $((OPTIND - 1))
+
+# Allow for ../luacheck.sh as a default
+if [[ -z "${LUACHECK:-}" ]]; then
+  if [[ -x "$SELF/../luacheck.sh" ]]; then
+    LUACHECK="$SELF/../luacheck.sh"
+  fi
+fi
 
 ACTION="${1:-diff}"
 
@@ -232,6 +244,9 @@ deploy() { # dest
   local dest="$1"
   git ls-tree -r --name-only $(get_branch) | while read entry; do
     deploy_check_skip $entry && continue
+    if [[ "$entry" =~ \.lua$ ]]; then
+      do_luacheck "$entry"
+    fi
     local dpath="$(dirname "$entry")"
     info "Replicating $entry to $dest/$entry"
     if [[ -n "$dpath" ]] && [[ "$dpath" != "." ]]; then
@@ -241,6 +256,17 @@ deploy() { # dest
     fi
     dry checked cp "$entry" "$dest/$entry"
   done
+}
+
+# Invoke luacheck on the file
+do_luacheck() { # file...
+  if [[ -z "${LUACHECK:-}" ]]; then
+    info "luacheck not available; skipping check"
+  elif [[ -x "${LUACHECK:-}" ]]; then
+    dry checked "$LUACHECK" "${LUACHECK_ARGS[@]}" "$@"
+  else
+    warn "luacheck '$LUACHECK' not executable"
+  fi
 }
 
 NOITA="$(find_noita)"

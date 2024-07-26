@@ -263,10 +263,12 @@ do_luacheck() { # file...
   if [[ -z "${LUACHECK:-}" ]]; then
     info "luacheck not available; skipping check"
   elif [[ -x "${LUACHECK:-}" ]]; then
-    dry checked "$LUACHECK" "${LUACHECK_ARGS[@]}" "$@"
+    "$LUACHECK" "${LUACHECK_ARGS[@]}" "$@"
+    return $?
   else
     warn "luacheck '$LUACHECK' not executable"
   fi
+  return 0
 }
 
 NOITA="$(find_noita)"

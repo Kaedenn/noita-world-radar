@@ -55,6 +55,9 @@ function Radar:draw_for(entid, kind)
     end
     local player = get_players()[1]
     local pos_x, pos_y = EntityGetTransform(player)
+    if pos_x == nil or pos_y == nil then
+        return -- Player isn't in the world
+    end
     local ex, ey = EntityGetFirstHitboxCenter(entid)
     local dx, dy = ex - pos_x, ey - pos_y
     local distance = get_magnitude(dx, dy)

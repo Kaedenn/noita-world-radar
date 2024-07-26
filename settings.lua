@@ -78,12 +78,15 @@ mod_settings = {
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
             {
-                id = "show_radar",
-                ui_name = "Show Indicators",
-                ui_description = "Show indicator sprites around the player that point to the found item. Works similar to the Enemy/Item/Wand Radar perks.",
-                value_default = true,
+                id = "radar_distance",
+                ui_name = "Radar Sprite Distance",
+                ui_description = "How far away from the player to display the radar blips (perks use 20, default is 40).",
+                value_default = 40,
+                value_min = 5,
+                value_max = 50,
+                value_display_multiplier = 1,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
-            }
+            },
         },
     },
 }

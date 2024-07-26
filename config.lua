@@ -12,7 +12,7 @@ CONF = {
     SHOW_IMAGES = "show_images",
     SHOW_COLOR = "color",
     SHOW_CLOSED = "show_closed",
-    SHOW_RADAR = "show_radar",
+    RADAR_DISTANCE = "radar_distance",
 }
 
 function conf_get(key)

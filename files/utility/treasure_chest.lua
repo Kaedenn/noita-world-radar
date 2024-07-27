@@ -1,24 +1,65 @@
---[[ Treasure chest content prediction ]]
+--[[ Treasure chest content prediction
+--
+-- This script attempts to determine what a treasure chest would drop
+-- when opened.
+--
+-- Rewards are tables with the following keys:
+--  type:string             One of the type codes below
+--  name:string             Name of the new entity
+--  entity:string           Path to the new entity xml (or nil)
+--  amount:number           Amount of this type dropped (or nil)
+--  entities:{string...}?   Table of new entity xmls
+--
+-- Reward types:
+--  entity      Spawn a simple entity given by the path
+--  gold        Spawn gold nuggets; amount has the total value
+--  wand        Spawn a wand; entity is the path to the wand XML
+--  card        Spawn one or more spell(s); amount=number of spells,
+--              entities={spell IDs (eg. BOMB, X_RAY, etc.)}
+--  item        Spawn a single item
+--  potion      Spawn a single potion
+--  pouch       Spawn a material pouch
+--  reroll      Re-roll the drop table; amount=number of times
+--  convert     Convert the treasure chest sprite to gold dust
+--  potions     (Greater Treasure Chest only) Spawn multiple potions;
+--              amount=number of potions, entities={potion XMLs}
+--  goldrain    (Greater Treasure Chest only) Start a gold rain event
+--  sampo       (Greater Treasure Chest only) The Sampo
+--
+-- The amount of gold dropped by gold rain cannot be predicted because the
+-- random seed uses the newly-created entity ID. Because chest prediction
+-- does not spawn entities, this can't be done.
+--
+--]]
 
---[[ FIXME: This doesn't seem to work for greater treasure chests.
--- See https://kaliuresis.github.io/noa/ and invoke the following for testing:
-cx, cy = 0, 0               -- Update with values from NOA
-SetRandomSeed(cx, cy))
-print_rewards(do_chest_get_rewards_super(cx, cy, 0, cx, cy, false))
-
-print_rewards(chest_get_rewards(entity_id))
-
+--[[
 dofile("mods/world_radar/files/utility/treasure_chest.lua")
-cpos = {{-293, -2945}, {-61, 261}}
-cx, cy = unpack(cpos[2])
+cx, cy = 0, 0 -- Replace with your location
 SetRandomSeed(cx, cy)
 print_rewards(do_chest_get_rewards_super(cx, cy, 0, cx, cy, false))
 --]]
+
+-- TODO: Add potion contents (they use the same chest spawn coords)
+-- FIXME: Fix gold amounts being inaccurate for normal treasure chests
+-- TODO: Add utility boxes
 
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/gun/gun_actions.lua")
 dofile_once("data/scripts/game_helpers.lua")
 -- luacheck: globals actions
+
+REWARD_TYPE_ENTITY = "entity"
+REWARD_TYPE_GOLD = "gold"
+REWARD_TYPE_WAND = "wand"
+REWARD_TYPE_CARD = "card"
+REWARD_TYPE_ITEM = "item"
+REWARD_TYPE_POTION = "potion"
+REWARD_TYPE_POUCH = "pouch"
+REWARD_TYPE_REROLL = "reroll"
+REWARD_TYPE_CONVERT = "convert"
+REWARD_TYPE_POTIONS = "potions"
+REWARD_TYPE_GOLDRAIN = "goldrain"
+REWARD_TYPE_SAMPO = "sampo"
 
 --[[ Obtain the rewards that would be dropped by the treasure chest ]]
 function chest_get_rewards(entity_id)
@@ -35,17 +76,22 @@ function chest_get_rewards(entity_id)
     end
 
     local fname = EntityGetFilename(entity_id)
-    local rewards
+    local rewards = {}
     if fname:match("chest_random_super") then
         SetRandomSeed(rand_x, rand_y)
         rewards = do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, false)
-    else
+    elseif fname:match("chest_random") then
         -- Offsets taken from data/scripts/items/chest_random.lua
         rand_x = rand_x + 509.7
         rand_y = rand_y + 683.1
 
         SetRandomSeed(rand_x, rand_y)
         rewards = do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, false)
+    else
+        local pos_str = ("(%f,%f)"):format(x, y)
+        local spawn_str = ("(%d,%d)"):format(rand_x, rand_y)
+        print_error(("Entity %d at %s (from %s) isn't a treasure chest"):format(
+            entity_id, pos_str, spawn_str))
     end
 
     return rewards
@@ -95,18 +141,26 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
                 reward.amount = 1000
             else
                 local tamount = Random(1, 3)
-                reward.amount = reward.amount + tamount * 50
-                if Random(0, 100) > 50 then
-                    tamount = Random(1, 3)
-                    reward.amount = reward.amount + tamount * 200
+                for i=1, tamount do
+                    reward.amount = reward.amount + 50
                     dummy = Random(-10, 10) -- Discard for x position
                     dummy = Random(-10, 5) -- Discard for y position
                 end
+                if Random(0, 100) > 50 then
+                    tamount = Random(1, 3)
+                    for i=1, tamount do
+                        reward.amount = reward.amount + 200
+                        dummy = Random(-10, 10) -- Discard for x position
+                        dummy = Random(-10, 5) -- Discard for y position
+                    end
+                end
                 if Random(0, 100) > 80 then
                     tamount = Random(1, 3)
-                    reward.amount = reward.amount + tamount * 1000
-                    dummy = Random(-10, 10) -- Discard for x position
-                    dummy = Random(-10, 5) -- Discard for y position
+                    for i=1, tamount do
+                        reward.amount = reward.amount + 1000
+                        dummy = Random(-10, 10) -- Discard for x position
+                        dummy = Random(-10, 5) -- Discard for y position
+                    end
                 end
             end
         elseif rnd <= 50 then -- Potion
@@ -321,6 +375,7 @@ function do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, set_rand_)
                 table.insert(reward.entities, "data/entities/items/pickup/potion_secret.xml")
                 table.insert(reward.entities, "data/entities/items/pickup/potion_random_material.xml")
             end
+            reward.amount = #reward.entities
         elseif rnd <= 15 then
             reward.type = "goldrain"
             reward.name = "gold rain"
@@ -357,7 +412,7 @@ function do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, set_rand_)
                 reward.name = "$item_wand (level 6) (unshuffle)"
                 reward.entity = "data/entities/items/wand_unshuffle_06.xml"
             elseif rnd <= 99 then
-                reward.name = "$item_wand (level 6)"
+                reward.name = "$item_wand (level 6)" -- Not a typo
                 reward.entity = "data/entities/items/wand_level_06.xml"
             elseif rnd <= 100 then
                 reward.name = "$item_wand (level 10)"
@@ -451,9 +506,13 @@ function format_rewards(rewards)
         elseif reward.type == "reroll" then
             table.insert(text, ("Reroll %dx"):format(reward.amount))
         elseif reward.type == "potions" then
-            table.insert(text, ("Multiple potions: %s"):format(table.concat(reward.entities, ", ")))
+            for _, potion in ipairs(reward.entities) do
+                table.insert(text, ("Potion: %s"):format(potion))
+            end
         elseif reward.type == "goldrain" then
             table.insert(text, "Gold rain")
+        elseif reward.type == "sampo" then
+            table.insert(text, "The Sampo")
         else
             table.insert(text, ("Invalid reward %s"):format(reward.type))
         end

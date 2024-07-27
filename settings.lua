@@ -49,6 +49,21 @@ mod_settings = {
                 value_default = false,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
+            --[[
+            {
+                id = "radar_range",
+                ui_name = "Scanner Range",
+                ui_description = "How far away should the radar scan?",
+                value_default = "infinite",
+                values = {
+                    {"onscreen", "On Screen"},
+                    {"perk_range", "Same as Radar Perks"},
+                    {"world", "Current World"},
+                    {"infinite", "All Loaded Chunks (Default)"},
+                },
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            --]]
         },
     },
 
@@ -73,20 +88,35 @@ mod_settings = {
             {
                 id = "show_closed",
                 ui_name = "Show When Closed",
-                ui_description = "Show on-screen text even if the UI is disabled.",
+                ui_description = "Show on-screen text even if the UI is closed or disabled.",
                 value_default = false,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
             {
                 id = "radar_distance",
                 ui_name = "Radar Sprite Distance",
-                ui_description = "How far away from the player to display the radar blips (perks use 20, default is 40).",
+                ui_description = "How far away from the player are the radar icons drawn? (perks use 20, default is 40).",
                 value_default = 40,
                 value_min = 5,
                 value_max = 50,
                 value_display_multiplier = 1,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
+            --[[
+            {
+                id = "gui_anchor",
+                ui_name = "Text Location",
+                ui_description = "Where should the on-screen text be drawn?",
+                value_default = "bottom_left",
+                values = {
+                    {"top_left", "Top Left (Below Wands)"},
+                    {"bottom_left", "Bottom Left (Default)"},
+                    {"top_right", "Top Right (Below Health)"},
+                    {"bottom_right", "Bottom Right"},
+                },
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            --]]
         },
     },
 }

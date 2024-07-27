@@ -29,6 +29,18 @@ function container_get_contents(entity)
     return content_map, content_list
 end
 
+--[[ Determine the overall capacity for the given container ]]
+function container_get_capacity(entid)
+    local total_capacity = tonumber(GlobalsGetValue("EXTRA_POTION_CAPACITY_LEVEL", "1000")) or 1000
+    if EntityHasTag(entid, "extra_potion_capacity") then
+        local comp = EntityGetFirstComponentIncludingDisabled(entid, "MaterialSuckerComponent")
+        if comp ~= nil then
+            total_capacity = ComponentGetValue(comp, "barrel_size")
+        end
+    end
+    return total_capacity
+end
+
 --[[ Easily obtain all of the materials ]]
 function generate_material_tables()
     local tables = {

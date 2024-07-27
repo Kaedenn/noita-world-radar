@@ -19,16 +19,28 @@ optional:
   image: string       path to a PNG image file
   width: number       override width of the image in pixels
   height: number      override height of the image in pixels
-  wrapped_text: string    display text wrapped to the container
-  separator_text: string  display text with a separator
-  label_text: string      display text as a label
-  bullet_text: string     display text with a bullet
+  wrapped_text: string    display string wrapped to the container
+  separator_text: string  display string with a separator
+  label_text: string      display string as a label
+  bullet_text: string     display string with a bullet
   button: table       add a button to the left of the entry
     .text: string     button text (default: "Button")
     .id: string       optional button ID, if button.text lacks one
     .func: function   function called if the button is clicked
     .small: boolean   if true, creates a small button
     [i]: any          applied to the function as arguments
+  wrapped: boolean    draw strings [i] using word wrapping
+  as_separator: boolean   draw strings [i] with a separator
+  as_label: boolean   draw strings [i] as label text
+  as_bullet: boolean  draw strings [i] with a bullet
+  disabled: boolean   draw strings [i] as disabled text
+  [i]: string|table   indexed entries: strings or tables
+```
+
+Note that `wrapped`, `as_separator`, `as_label`, `as_bullet`, and `disabled` only affect the strings _in the same table_. Therefore:
+```lua
+{as_bullet: true, "This text has a bullet"} -- GOOD
+{as_bullet: true, {"This text does not have a bullet"}} -- BAD
 ```
 
 The indexed values (`fragment[1]`, `fragment[2]`, etc) can be zero or more of the
@@ -47,7 +59,7 @@ The following labels are understood:
 
 When displaying images via `Line.image`, the width and height keys can be used
 to override the image width and height. For instance:
-```
+```lua
   {"mods/mymod/files/myimage.png", height=20}
 ```
 will display the image using its actual width but with a height of 20 pixels

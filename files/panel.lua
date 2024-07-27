@@ -296,6 +296,13 @@ function Panel:print(msg)
     print(msg) -- Writes to logger.txt if logging is enabled
 end
 
+--[[ Print text to the panel, the game, and to the logger (if enabled) ]]
+function Panel:print_error(msg)
+    self:p({{"ERROR:", color="lightred"}, msg})
+    GamePrint(("ERROR: %s"):format(msg))
+    print_error(msg) -- Writes to logger.txt if logging is enabled
+end
+
 --[[ True if the given panel ID refers to a known Panel object ]]
 function Panel:is(pid)
     return self.PANELS[pid] ~= nil
@@ -439,8 +446,73 @@ function Panel:build_menu(imgui)
 
 end
 
---[[ Private: draw a line to the feedback box ]]
-function Panel:draw_line(imgui, line, show_images, show_color)
+--[[ Draw an image to the feedback box ]]
+function Panel:draw_image(imgui, image, rescale, extra)
+    local path = image
+    local width, height, uvx, uvy = 0, 0, 0, 0
+    local frame_width, frame_height = nil, nil
+    local odata = extra or {}
+    if type(image) == "table" then
+        path = image.path
+        width = image.width or 0
+        height = image.height or 0
+        frame_width = image.frame_width
+        frame_height = image.frame_height
+    end
+    if path == "" or type(path) ~= "string" then
+        return false
+    end
+    local img = imgui.LoadImage(path)
+    if not img and odata.fallback then
+        img = imgui.LoadImage(odata.fallback)
+        if not img then
+            return false
+        end
+    end
+
+    if rescale == nil and odata.rescale then
+        rescale = true
+    end
+
+    if frame_width then uvx = frame_width / img.width end
+    if frame_height then uvy = frame_height / img.height end
+    if rescale then
+        local want_height = height
+        if not height or height == 0 then
+            want_height = imgui.GetTextLineHeight()
+        end
+        local orig_height = frame_height or img.height
+        local orig_width = frame_width or img.width
+        local want_width = want_height / orig_height * orig_width
+        width = math.floor(want_width)
+        height = math.floor(want_height)
+    else
+        if width == 0 then width = img.width end
+        if height == 0 then height = img.height end
+    end
+    if uvx ~= 0 or uvy ~= 0 then
+        imgui.Image(img, width, height, 0, 0, uvx, uvy)
+    else
+        imgui.Image(img, width, height)
+    end
+    return true
+end
+
+--[[ Draw a line to the feedback box
+-- @param imgui userdata Reference to the Noita-Dear-ImGui object
+-- @param line table|string Line to print
+-- @param show_images boolean|nil Don't draw images if this is false
+-- @param show_color boolean|nil Don't draw using color if this is false
+-- @param data table|nil For recursive calls: the table containing this piece
+--
+-- If show_images is nil, then the "show_images" setting is used
+-- If show_color is nil, then the "show_color" setting is used
+--
+-- The line parameter has quite a complex structure. See documentation in the
+-- build directory for its structure.
+--]]
+function Panel:draw_line(imgui, line, show_images, show_color, data)
+    if not data then data = {} end
     if show_images == nil then show_images = conf_get(CONF.SHOW_IMAGES) end
     if show_color == nil then show_color = conf_get(CONF.SHOW_COLOR) end
     if type(line) == "table" then
@@ -450,11 +522,11 @@ function Panel:draw_line(imgui, line, show_images, show_color)
             color = self.colors[level] or nil
         end
 
-        -- Display "time remaining" as a simple percentage
+        -- Display "time remaining" as a simple percentage (TODO: improve)
         if line.duration and line.max_duration then
             local pct = math.min(math.floor(line.duration / line.max_duration * 100), 99)
             local prefix = ("%02d"):format(pct)
-            imgui.SetNextItemWidth(10)
+            imgui.SetNextItemWidth(10) -- FIXME: Calculate actual width
             imgui.TextDisabled(prefix)
             imgui.SameLine()
         end
@@ -469,6 +541,9 @@ function Panel:draw_line(imgui, line, show_images, show_color)
         end
 
         if line.image and show_images then
+            self:draw_image(imgui, line.image, true, line)
+            imgui.SameLine()
+            --[[
             local img = imgui.LoadImage(line.image)
             if img then
                 local iwidth = line.width or img.width
@@ -476,6 +551,7 @@ function Panel:draw_line(imgui, line, show_images, show_color)
                 imgui.Image(img, iwidth, iheight)
                 imgui.SameLine()
             end
+            ]]
         end
 
         if line.button then
@@ -496,10 +572,13 @@ function Panel:draw_line(imgui, line, show_images, show_color)
             imgui.SameLine()
 
             if ret then
-                local bargs = {unpack(line.button)}
-                table.insert(bargs, self)
-                table.insert(bargs, imgui)
-                bfunc(unpack(bargs))
+                local bargs = {unpack(line.button)} -- Copy to modify
+                table.insert(bargs, self)   -- Append self
+                table.insert(bargs, imgui)  -- Append imgui
+                local result, value = pcall(bfunc, unpack(bargs))
+                if not result then
+                    self:print_error(("ERROR: %s"):format(value))
+                end
             end
         end
 
@@ -525,7 +604,7 @@ function Panel:draw_line(imgui, line, show_images, show_color)
                 imgui.Text(("%s:"):format(level))
                 imgui.SameLine()
             end
-            self:draw_line(imgui, token, show_images, show_color)
+            self:draw_line(imgui, token, show_images, show_color, line)
         end
         if pushed_color then
             imgui.PopStyleColor()
@@ -533,8 +612,21 @@ function Panel:draw_line(imgui, line, show_images, show_color)
     elseif line == self.separator then
         imgui.Separator()
     elseif type(line) == "string" then
-        imgui.Text(line)
+        if data.wrapped then
+            imgui.TextWrapped(line)
+        elseif data.as_separator then
+            imgui.SeparatorText(line)
+        elseif data.as_label then
+            imgui.LabelText(line)
+        elseif data.as_bullet then
+            imgui.BulletText(line)
+        elseif data.disabled then
+            imgui.TextDisabled(line)
+        else
+            imgui.Text(line)
+        end
     else
+        -- It's neither a table nor a string?
         imgui.Text(tostring(line))
     end
 end

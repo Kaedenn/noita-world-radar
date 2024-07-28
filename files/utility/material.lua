@@ -2,6 +2,137 @@
 -- Material-related helper functions
 --]]
 
+nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
+_material_cache = nil
+
+local function _parse_cell_data(entry) -- TODO
+
+end
+
+local function _parse_cell_data_child(entry) -- TODO
+
+end
+
+local function _parse_reaction(entry)
+    local inputs = {}
+    local outputs = {}
+    local probability = tonumber(entry.attr.probability) or entry.attr.probability
+    for tag, value in pairs(entry.attr) do
+        local side, idx = tag:match("([%w]+put)_cell([%d]+)")
+        if side == "input" then
+            table.insert(inputs, {idx=idx, value=value})
+        elseif side == "output" then
+            table.insert(outputs, {idx=idx, value=value})
+        end
+    end
+    table.sort(inputs, function(left, right) return left.idx < right.idx end)
+    table.sort(outputs, function(left, right) return left.idx < right.idx end)
+
+    local mat_from = {}
+    for _, entry in ipairs(inputs) do
+        table.insert(mat_from, entry.value)
+    end
+
+    local mat_to = {}
+    for _, entry in ipairs(outputs) do
+        table.insert(mat_to, entry.value)
+    end
+
+    return mat_from, mat_to, probability
+end
+
+local function _parse_req_reaction(entry) -- TODO
+
+end
+
+--[[ Parse materials.xml ]]
+function load_materials_xml()
+    local text = ModTextFileGetContent("data/materials.xml")
+    local mats = nxml.parse(text)
+
+    local cells = {}
+    local cell_children = {}
+    local reactions = {}
+    local req_reactions = {}
+
+    for idx, entry in ipairs(mats.children) do
+        local tag = entry.name
+        if tag == "CellData" then
+            -- TODO
+        elseif tag == "CellDataChild" then
+            -- TODO
+        elseif tag == "Reaction" then
+            local m_from, m_to, prob = _parse_reaction(entry)
+            table.insert(reactions, {
+                inputs = m_from,
+                outputs = m_to,
+                probability = prob,
+            })
+        elseif tag == "ReqReaction" then
+            -- TODO: input1 becomes output1 unless input2+ are present
+        else
+            print_error(("Invalid materials.xml tag %d: %s"):format(idx, entry))
+        end
+    end
+    return {
+        materials = cells,
+        child_materials = cell_children
+        reactions = reactions,
+        req_reactions = req_reactions,
+    }
+end
+
+--[[ Load and cache the materials.xml file ]]
+function get_material_data()
+    if not _material_cache then
+        _material_cache = load_materials_xml()
+    end
+    return _material_cache
+end
+
+--[[ True if the material matches the given condition ]]
+function match_material(material_name, condition)
+    if material_name == condition then return true end
+    if condition:match("^%[.*%]$") then
+        local mtype = CellFactory_GetType(material_name)
+        if not mtype then return false end
+        local mtags = CellFactory_GetTags(mtype)
+        if not mtags then return false end
+        for _, mtag in ipairs(mtags) do
+            if mtag == condition then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+--[[ Determine if the two materials react. If so, return the result(s)
+-- Returns nil or {output, probability} where
+-- output is either a string or a table of strings
+-- probability is a number
+--]]
+function check_material_reaction(material1, material2)
+    local data = get_material_data()
+    for _, reaction in ipairs(data.reactions) do
+        local prob = reaction.probability
+        if #reaction.inputs ~= 2 then
+            goto continue
+        end
+        local input1, input2 = unpack(reaction.inputs)
+        local matches = (
+            (match_material(material1, input1) and match_material(material2, input2))
+            or
+            (match_material(material2, input1) and match_material(material1, input2))
+        )
+        if matches then
+            return {reaction.outputs, reaction.probability}
+        end
+        ::continue::
+    end
+    return nil
+end
+
 --[[ Get the contents of a given container (flask/pouch) ]]
 function container_get_contents(entity)
     local comps = EntityGetComponentIncludingDisabled(entity, "MaterialInventoryComponent")

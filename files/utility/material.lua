@@ -29,13 +29,13 @@ local function _parse_reaction(entry)
     table.sort(outputs, function(left, right) return left.idx < right.idx end)
 
     local mat_from = {}
-    for _, entry in ipairs(inputs) do
-        table.insert(mat_from, entry.value)
+    for _, ientry in ipairs(inputs) do
+        table.insert(mat_from, ientry.value)
     end
 
     local mat_to = {}
-    for _, entry in ipairs(outputs) do
-        table.insert(mat_to, entry.value)
+    for _, oentry in ipairs(outputs) do
+        table.insert(mat_to, oentry.value)
     end
 
     return mat_from, mat_to, probability
@@ -76,7 +76,7 @@ function load_materials_xml()
     end
     return {
         materials = cells,
-        child_materials = cell_children
+        child_materials = cell_children,
         reactions = reactions,
         req_reactions = req_reactions,
     }
@@ -107,10 +107,10 @@ function match_material(material_name, condition)
     return false
 end
 
---[[ Determine if the two materials react. If so, return the result(s)
+--[[ Determine if the two materials react and, if so, return their outputs
 -- Returns nil or {output, probability} where
--- output is either a string or a table of strings
--- probability is a number
+-- output is a table of strings
+-- probability is a number; higher means more probable/efficient conversion
 --]]
 function check_material_reaction(material1, material2)
     local data = get_material_data()

@@ -10,6 +10,30 @@ function table_clear(tbl)
     end
 end
 
+--[[ True if the given table is truly empty ]]
+function table_empty(tbl)
+    if tbl == nil then return true end
+    if #tbl > 0 then return false end
+    local empty = true
+    for key, val in pairs(tbl) do
+        empty = false
+    end
+    return empty
+end
+
+--[[ Determine if the given table includes the given entry ]]
+function table_has_entry(tbl, entry)
+    for _, item in ipairs(tbl) do
+        if item.path and entry.path and item.path == entry.path then
+            return true
+        end
+        if item.id == entry.id and item.name == entry.name then
+            return true
+        end
+    end
+    return false
+end
+
 --[[ Split a string into parts ]]
 function split_string(inputstr, sep)
     sep = sep or "%s"

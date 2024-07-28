@@ -464,10 +464,12 @@ function Panel:draw_image(imgui, image, rescale, extra)
     end
     local img = imgui.LoadImage(path)
     if not img and odata.fallback then
-        img = imgui.LoadImage(odata.fallback)
-        if not img then
-            return false
-        end
+        path = odata.fallback
+        img = imgui.LoadImage(path)
+    end
+    if not img then
+        print_error(("Failed to load image %q"):format(path))
+        return false
     end
 
     if rescale == nil and odata.rescale then
@@ -540,18 +542,9 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
             pushed_color = true
         end
 
-        if line.image and show_images then
-            self:draw_image(imgui, line.image, true, line)
+        if (line.image or line.fallback) and show_images then
+            self:draw_image(imgui, line.image or line.fallback, true, line)
             imgui.SameLine()
-            --[[
-            local img = imgui.LoadImage(line.image)
-            if img then
-                local iwidth = line.width or img.width
-                local iheight = line.height or img.height
-                imgui.Image(img, iwidth, iheight)
-                imgui.SameLine()
-            end
-            ]]
         end
 
         if line.button then

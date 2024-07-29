@@ -2,6 +2,9 @@
 -- Entity-related helper functions
 --]]
 
+dofile_once("data/scripts/lib/utilities.lua")
+-- luacheck: globals get_players
+
 --[[ True if entity is a child of root ]]
 function is_child_of(entity, root)
     if root == nil then root = get_players()[1] end

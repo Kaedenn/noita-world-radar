@@ -1180,10 +1180,6 @@ if rawget(_G, "libkae_do_test") then
   end
 
   function libkae_test()
-    local saved_log = false
-    if rawget(_G, "libkae_test_log") then
-      saved_log = true
-    end
     local save_log = rawget(_G, "libkae_test_log")
     test.eq(1, 1)
     test.ne(1, 0)

@@ -15,6 +15,8 @@
 --
 --]]
 
+-- TODO: Implement <Base> merging from build_items.lua
+
 local self_name = arg[0]:gsub(".*\\/", "")
 local base_path = arg[0]:gsub("[\\/][^\\/]+.lua$", "")
 package.path = package.path .. ";" .. table.concat({
@@ -139,8 +141,6 @@ function main()
             end
         end
     end
-
-    -- TODO: Remove illusory entities that have a normal counterpart
 
     logger.info("Found %d entities in %s", #entlist, argv.data_path)
 

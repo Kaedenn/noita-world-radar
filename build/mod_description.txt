@@ -1,6 +1,6 @@
 "I need a teleport bolt." "Are there Greater Treasure Chests nearby?" "Are there rare enemies nearby?" "Is there a flask of Healthium nearby?"
 
-This mod is the ultimate radar scanner for all things entity: spells, enemies, materials, and items. It will alert you if it finds something interesting nearby. With debug mode enabled, it'll even tell you where it is.
+This mod is the ultimate radar scanner for all things entity: spells, enemies, materials, and items. It will alert you if it finds something interesting nearby. With radar enabled, it'll point you right to it. With debug mode enabled, it'll even tell you where it is.
 
 This mod does require Noita-Dear-ImGui, which you can obtain here:
 https://github.com/dextercd/Noita-Dear-ImGui/releases
@@ -10,10 +10,12 @@ The UI includes the following key features:
 * A list of all biome modifiers currently active and which biome(s) are affected.
 * A list of all items nearby.
 * A list of all enemies nearby.
+* Chest prediction! If there are treasure chests nearby, the UI will have a "View" button next to the treasure chest. Clicking it will tell you what drops from that chest.
 * The ability to configure the spell search list.
 * The ability to configure the enemy search list.
 * The ability to configure the material (flask or pouch contents) search list.
 * The ability to configure the item search list.
+* There is now a radar that appears when desired things are nearby. This radar can be disabled via the checkbox.
 * Spells and materials can be auto-removed as soon as you obtain them. For spells, this is enabled by default. For materials, it's disabled by default. This can be changed either in the mod settings or in the drop-down menu.
 * New! You can mark each individual spell to ignore always-cast. For instance, if you're looking for Add Mana, you can ignore wands that always cast Add Mana.
 
@@ -23,28 +25,32 @@ There are three levels of configuration:
 3. Per-run lists: changes to the lists are saved per-run. If you start a new run, these changes are lost. This overrides both the default and persistent lists.
 
 Planned features are as follows:
-* Ability to predict the drops of normal treasure chests and include those in the nearby spells/items/materials lists.
-* Default spell list. Currently this will include Add Mana, Circle of Vigor, and Long Distance Cast.
+* Ability to include predicted contents of a treasure chest to the nearby spell, material, and item lists.
 * Option to add all spells you have yet to unlock to the search list.
 * Option to restrict spells to require always-cast instead of prohibit it.
-* Option to add a radar (like the item/wand/enemy radar perks) that will point you towards the found object(s).
 
 This mod is how I found my first ever Greater Treasure Chest and my latest Healthium flask.
 
+Spell default list:
+Add Mana
+Circle of Vigor
+Long Distance Cast
+
 Material default list:
-creepy_liquid
-magic_liquid_hp_regeneration (Healthium)
-magic_liquid_weakness (Diminution)
-urine
+Creepy Liquid (creepy_liquid)
+Healthium (magic_liquid_hp_regeneration)
+Diminution (magic_liquid_weakness)
+Urine (urine)
 
 Enemy default list:
-$animal_worm_big (The giant worm that sometimes drops health increases)
-$animal_chest_leggy (The rare leggy chest mimic)
-$animal_dark_alchemist (The rare heart mimic)
-$animal_mimic_potion (New potion mimic)
-$animal_playerghost (Wand ghosts)
-$animal_shaman_wind (The very rare spell refresh mimic)
+Jättimato ($animal_worm_big) (The giant worm that sometimes drops health increases)
+Jalkamatkatavara ($animal_chest_leggy) (The rare leggy chest mimic)
+Pahan muisto ($animal_dark_alchemist) (The rare heart mimic)
+Henkevä potu ($animal_mimic_potion) (Potion mimic)
+Kummitus ($animal_playerghost) (Wand ghosts that spawn holding player wands)
+Valhe ($animal_shaman_wind) (The very rare spell refresh mimic)
 
 Item default list:
-$item_chest_treasure_super (Greater Treasure Chest)
-$item_greed_die (Greed Die; the exceedingly-rare one)
+Greater Treasure Chest ($item_chest_treasure_super)
+Greed Die ($item_greed_die)
+Vuoksikivi ($item_waterstone)

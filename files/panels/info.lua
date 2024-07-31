@@ -1457,28 +1457,40 @@ function InfoPanel:_format_chest_reward(reward)
 
     local line = {}
     if rtype == REWARD.WAND then -- TODO
-        table.insert(line, ("Wand: %s [%s]"):format(rname, rentity))
+        table.insert(line, {
+            {"Wand"},
+            {
+                --image=wand_data.icon,
+                --fallback="data/ui_gfx/icon_unkown.png",
+                color="lightcyan",
+                ("%s [%s]"):format(rname, rentity)
+            },
+        })
     elseif rtype == REWARD.CARD then
         for _, spell in ipairs(rentities) do
-            local spell_data = spell_get_data(spell)
-            if not spell_data.name then
-                self.host:print_error(("Invalid spell %q"):format(spell))
-            else
+            local spell_data = spell_get_data(spell:upper())
+            local name = ("%s (unknown spell)"):format(spell)
+            local icon = nil
+            if spell_data.name then
                 local spell_name = spell_data.name
                 if spell_name:match("^%$") then
                     spell_name = GameTextGet(spell_name)
                 end
-                local name = ("%s [%s]"):format(spell_name, spell)
-                table.insert(line, {
-                    {"Spell"},
-                    {
-                        image=spell_data.sprite,
-                        fallback="data/ui_gfx/icon_unkown.png",
-                        color="lightcyan",
-                        name,
-                    },
-                })
+                name = ("%s [%s]"):format(spell_name, spell)
+                icon = spell_data.sprite
+            else
+                name = ("%s (unknown spell)")
             end
+            table.insert(line, {
+                {"Spell"},
+                {
+                    image=icon,
+                    fallback="data/ui_gfx/icon_unkown.png",
+                    color="lightcyan",
+                    name,
+                },
+                clear_line=true,
+            })
         end
     elseif rtype == REWARD.GOLD then
         local iinfo = self:_get_item_by_name("goldnugget")
@@ -1501,6 +1513,10 @@ function InfoPanel:_format_chest_reward(reward)
     elseif rtype == REWARD.POTION or rtype == REWARD.POUCH then
         local iinfo = self:_get_item_by_name(rentity)
         local minfo = self:_get_material_by_name(reward.content)
+        local mname = reward.content
+        if minfo.locname and minfo.name then
+            mname = ("%s (%s)"):format(minfo.locname, minfo.name)
+        end
         table.insert(line, {
             {
                 image=iinfo.icon,
@@ -1511,7 +1527,7 @@ function InfoPanel:_format_chest_reward(reward)
                 image=minfo.icon,
                 fallback="data/ui_gfx/icon_unkown.png",
                 color="lightcyan",
-                ("%s (%s)"):format(minfo.locname, minfo.name),
+                mname,
             },
         })
     elseif rtype == REWARD.REROLL then
@@ -1519,7 +1535,7 @@ function InfoPanel:_format_chest_reward(reward)
             image="data/ui_gfx/perk_icons/no_more_shuffle.png",
             ("Reroll x%d"):format(ramount)
         })
-    elseif rtype == REWARD.POTIONS then
+    elseif rtype == REWARD.POTIONS then -- TODO: Display each potion type with material
         local iinfo = self:_get_item_by_name("potion")
         table.insert(line, {
             image=iinfo.icon,
@@ -1529,11 +1545,15 @@ function InfoPanel:_format_chest_reward(reward)
         })
         for _, content in ipairs(reward.contents) do
             local minfo = self:_get_material_by_name(content)
+            local mname = content
+            if minfo.locname and minfo.name then
+                mname = ("%s (%s)"):format(minfo.locname, minfo.name)
+            end
             table.insert(line, {
                 image=minfo.icon,
                 fallback="data/ui_gfx/icon_unkown.png",
                 color="lightcyan",
-                ("%s (%s)"):format(minfo.locname, minfo.name),
+                mname,
             })
         end
     elseif rtype == REWARD.GOLDRAIN then
@@ -1569,8 +1589,8 @@ function InfoPanel:message(contents, timer)
     text = text:gsub("[ ]+$", "")
     GamePrint(text)
 
-    local debug_msg = smallfolk.dumps(contents)
     if self.env.do_debug then
+        local debug_msg = smallfolk.dumps(contents)
         print(("InfoPanel:message(%s, %d)"):format(debug_msg, duration))
     end
     print(("InfoPanel:message(%q)"):format(text)) -- Writes to logger.txt (if enabled)
@@ -1717,6 +1737,10 @@ end
 function InfoPanel:init(environ, host, config)
     self.env = environ or self.env or {}
     self.host = host or {}
+    self.biomes = _get_biome_data()
+    self.gui = GuiCreate()
+
+    self.env.do_debug = false
 
     for _, bpair in ipairs(self.modes) do
         local mname, varname, default = unpack(bpair)
@@ -1729,9 +1753,6 @@ function InfoPanel:init(environ, host, config)
             end
         end
     end
-
-    self.biomes = _get_biome_data()
-    self.gui = GuiCreate()
 
     self.env.show_checkboxes = true
     self.env.import_dialog = false
@@ -1748,6 +1769,7 @@ function InfoPanel:init(environ, host, config)
     self.env.material_gas = false       -- Hide gasses
     self.env.material_fire = false      -- Hide fires
     self.env.material_solid = false     -- Hide solids
+    self.env.item_cache = nil
     self.env.entity_cache = nil
 
     self.env.spell_list = {}
@@ -1761,6 +1783,11 @@ function InfoPanel:init(environ, host, config)
     self.env.material_add_multi = false
     self.env.entity_add_multi = false
     self.env.item_add_multi = false
+
+    self.env.item_text = ""
+    self.env.material_text = ""
+    self.env.entity_text = ""
+    self.env.spell_text = ""
 
     self.env.messages = {}
 
@@ -2079,7 +2106,7 @@ function InfoPanel:draw(imgui)
 
     -- Display everything else: biomes, items, enemies
 
-    if self.env.list_biomes and not table_empty(self.biomes) then
+    if self.env.list_biomes then
         self.host:p({separator_text="Biome Modifiers"})
         for bname, bdata in pairs(self.biomes) do
             local biome_name = bdata.uiname or bdata.name or bname
@@ -2126,16 +2153,19 @@ function InfoPanel:draw(imgui)
                 local is_chest = (
                     EntityHasTag(entity, "chest") and (
                         iname:match("chest_random_super.xml") or
-                        iname:match("chest_random.xml")))
+                        iname:match("chest_random.xml") or
+                        iname:match("utility_box.xml")))
                 if is_chest then
                     line[1].button = {
                         text = "View",
                         id = ("chest_%d_%d_inspect"):format(ex, ey),
                         func = function(this, ent, phost, pimgui)
                             local rewards = chest_get_rewards(ent)
-                            this:message("Treasure Chest Rewards:")
                             for _, reward in ipairs(rewards) do
-                                this:message(this:_format_chest_reward(reward))
+                                this:message({
+                                    image=iinfo.icon,
+                                    this:_format_chest_reward(reward)
+                                })
                             end
                         end,
                         small = true,

@@ -524,12 +524,21 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
             color = self.colors[level] or nil
         end
 
-        -- Display "time remaining" as a simple percentage (TODO: improve)
+        -- Display "time remaining" as a simple percentage
         if line.duration and line.max_duration then
-            local pct = math.min(math.floor(line.duration / line.max_duration * 100), 99)
-            local prefix = ("%02d"):format(pct)
+            local pct = math.floor(line.duration / line.max_duration * 100)
+            local prefix = ("%02d"):format(math.min(pct, 99))
             imgui.SetNextItemWidth(10) -- FIXME: Calculate actual width
             imgui.TextDisabled(prefix)
+            if imgui.IsItemHovered() then
+                if imgui.BeginTooltip() then
+                    imgui.Text("Click to clear")
+                    imgui.EndTooltip()
+                end
+            end
+            if imgui.IsItemClicked() then
+                line.duration = 0
+            end
             imgui.SameLine()
         end
 
@@ -592,7 +601,11 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
         end
 
         for idx, token in ipairs(line) do
-            if idx ~= 1 then imgui.SameLine() end
+            if idx ~= 1 then
+                if type(token) ~= "table" or not token.clear_line then
+                    imgui.SameLine()
+                end
+            end
             if level ~= nil then
                 imgui.Text(("%s:"):format(level))
                 imgui.SameLine()

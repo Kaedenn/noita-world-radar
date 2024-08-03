@@ -54,3 +54,7 @@ Item default list:
 Greater Treasure Chest ($item_chest_treasure_super)
 Greed Die ($item_greed_die)
 Vuoksikivi ($item_waterstone)
+
+Curious to take a peek behind the curtains? https://github.com/Kaedenn/noita-world-radar/
+
+Suggestions welcome! Feel free to suggest changes, features, or anything else that comes to mind.

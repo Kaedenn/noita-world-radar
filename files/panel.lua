@@ -207,7 +207,10 @@ end
 function Panel:init(env, config)
     for pid, pobj in pairs(self.PANELS) do
         local res, val = pcall(function() pobj:init(env, self, config) end)
-        if not res then GamePrint(val) end
+        if not res then
+            GamePrint(val)
+            print_error(val)
+        end
     end
     local curr_panel = GlobalsGetValue(Panel.SAVE_KEY)
     if curr_panel ~= "" and self:is(curr_panel) then

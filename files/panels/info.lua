@@ -37,7 +37,7 @@ dofile_once("mods/world_radar/files/utility/material.lua")
 dofile_once("mods/world_radar/files/utility/spell.lua")
 -- luacheck: globals card_get_spell wand_get_spells spell_is_always_cast spell_get_name spell_get_data action_lookup
 dofile_once("mods/world_radar/files/utility/treasure_chest.lua")
--- luacheck: globals chest_get_rewards REWARD
+-- luacheck: globals entity_is_chest chest_get_rewards REWARD
 dofile_once("mods/world_radar/files/radar.lua")
 -- luacheck: globals Radar RADAR_KIND_SPELL RADAR_KIND_ENTITY RADAR_KIND_MATERIAL RADAR_KIND_ITEM
 dofile_once("mods/world_radar/files/lib/utility.lua")
@@ -2149,13 +2149,7 @@ function InfoPanel:draw(imgui)
                     {("%d at {%d,%d}"):format(entity, ex, ey)}
                 }
                 -- TODO: Make this available to the search functions
-                local iname = EntityGetFilename(entity)
-                local is_chest = (
-                    EntityHasTag(entity, "chest") and (
-                        iname:match("chest_random_super.xml") or
-                        iname:match("chest_random.xml") or
-                        iname:match("utility_box.xml")))
-                if is_chest then
+                if entity_is_chest(entity) then
                     line[1].button = {
                         text = "View",
                         id = ("chest_%d_%d_inspect"):format(ex, ey),

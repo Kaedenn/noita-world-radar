@@ -24,38 +24,42 @@ KPanelLib = dofile("mods/world_radar/files/panel.lua")
 KPanel = nil
 imgui = nil
 
+function do_print_error(...)
+    local args = {...}
+    local strings = {}
+    for _, arg in ipairs(args) do
+        table.insert(strings, tostring(arg))
+    end
+    local message = table.concat(strings, " ")
+    GamePrint(message)
+    print_error(message)
+end
+
+function do_call(func, ...)
+    local res, ret = pcall(func, ...)
+    if not res then do_print_error(ret) end
+    return res, ret
+end
+
 function _build_menu_bar_gui()
     if imgui.BeginMenuBar() then
-        local function do_build_menu()
-            if KPanel and KPanel.build_menu then
-                KPanel:build_menu(imgui)
-            end
+        if KPanel and KPanel.build_menu then
+            do_call(KPanel.build_menu, KPanel, imgui)
         end
-        local pres, pval = pcall(do_build_menu)
-        if not pres then GamePrint(("do_build('%s')"):format(pval)) end
-
         imgui.EndMenuBar()
     end
 end
 
 function _build_gui()
-    if not KPanel then
-        GamePrint("_build_gui: KPanel not defined")
-    elseif KPanel:current() ~= nil then
-        local function runner()
-            return KPanel:draw(imgui)
-        end
-        local panel_result, panel_value = pcall(runner)
-        if not panel_result then
-            imgui.Text("ERROR:")
-            imgui.SameLine()
-            imgui.Text(tostring(panel_value))
-            GamePrint(tostring(panel_value))
-        end
+    if KPanel and KPanel:current() ~= nil then
+        KPanel:draw(imgui)
     end
 end
 
---[[ See the Fungal Shift Query init.lua for why this is necessary ]]
+--[[ Load the material table.
+-- Because fungal shifts change the value returned by CellFactory_GetUIName(),
+-- we need to cache these values after the cell factory is initialized but
+-- before the world state (and thus the shift log) is loaded ]]
 function OnBiomeConfigLoaded()
     MaterialTables = generate_material_tables()
 end
@@ -85,18 +89,15 @@ function OnWorldPostUpdate()
 
     local show_closed = conf_get(CONF.SHOW_CLOSED)
     if conf_get(CONF.ENABLE) then
-        if imgui.Begin("World Radar###world_radar", nil, bit.bor(
+        if imgui.Begin("World Information Scanner###world_radar", nil, bit.bor(
             --imgui.WindowFlags.NoFocusOnAppearing,
             --imgui.WindowFlags.NoNavInputs,
             imgui.WindowFlags.HorizontalScrollbar,
             imgui.WindowFlags.MenuBar
             ))
         then
-            local res, val
-            res, val = pcall(_build_menu_bar_gui)
-            if not res then GamePrint(tostring(val)) end
-            res, val = pcall(_build_gui)
-            if not res then GamePrint(tostring(val)) end
+            do_call(_build_menu_bar_gui)
+            do_call(_build_gui)
             imgui.End()
         elseif KPanel then
             KPanel:draw_closed(imgui)

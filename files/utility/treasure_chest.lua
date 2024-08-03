@@ -73,6 +73,20 @@ CONTAINER = {
     POTION_RANDOM = "data/entities/items/pickup/potion_random_material.xml",
 }
 
+--[[ True if the entity is a treasure chest we can predict ]]
+function entity_is_chest(entid)
+    if EntityHasTag(entid, "chest") then
+        local iname = EntityGetFilename(entid)
+        if (iname:match("chest_random_super.xml") or
+            iname:match("chest_random.xml")) then
+            return true
+        end
+    elseif EntityHasTag(entid, "utility_box") then
+        return true
+    end
+    return false
+end
+
 --[[ Obtain the rewards that would be dropped by the treasure chest ]]
 function chest_get_rewards(entity_id)
     local x, y = EntityGetTransform(entity_id)

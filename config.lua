@@ -13,6 +13,10 @@ CONF = {
     SHOW_COLOR = "color",
     SHOW_CLOSED = "show_closed",
     RADAR_DISTANCE = "radar_distance",
+
+    RADAR_RANGE = "radar_range",
+    RADAR_RANGE_MANUAL = "radar_range_manual",
+    GUI_ANCHOR = "gui_anchor",
 }
 
 function conf_get(key)

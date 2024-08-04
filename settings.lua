@@ -3,10 +3,18 @@ dofile_once("data/scripts/lib/mod_settings.lua")
 -- luacheck: globals MOD_SETTING_SCOPE_RUNTIME
 
 -- Available if desired
--- mod_setting_changed_callback(mod_id, gui, in_main_menu, setting, old_value, new_value)
+-- mod_setting_change_fn(mod_id, gui, in_main_menu, setting, old_value, new_value)
 -- mod_setting_image(mod_id, gui, in_main_menu, im_id, setting)
+-- mod_setting_ui_fn(mod_id, gui, in_main_menu, im_id, setting)
 
 MOD_ID = "world_radar"
+
+function wr_range_manual(mod_id, gui, in_main_menu, im_id, setting)
+    -- luacheck: globals mod_setting_text
+    if ModSettingGetNextValue(MOD_ID .. ".radar_range") == "manual" then
+        mod_setting_text(mod_id, gui, in_main_menu, im_id, setting)
+    end
+end
 
 mod_settings_version = 1
 mod_settings = {
@@ -49,13 +57,13 @@ mod_settings = {
                 value_default = false,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
-            --[[
             {
                 id = "radar_range",
                 ui_name = "Scanner Range",
                 ui_description = "How far away should the radar scan?",
                 value_default = "infinite",
                 values = {
+                    {"manual", "Manual"},
                     {"onscreen", "On Screen"},
                     {"perk_range", "Same as Radar Perks"},
                     {"world", "Current World"},
@@ -63,7 +71,15 @@ mod_settings = {
                 },
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
-            --]]
+            {
+                id = "radar_range_manual",
+                ui_name = "Scanner Range",
+                ui_description = "How far away should the radar scan?",
+                value_default = "51200",
+                allowed_characters = "0123456789",
+                ui_fn = wr_range_manual,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
         },
     },
 
@@ -120,6 +136,20 @@ mod_settings = {
         },
     },
 }
+
+function wr_get_setting(name, setting_list)
+    local settings = setting_list or mod_settings or {}
+    for idx, setting in ipairs(settings) do
+        if setting.id == name then
+            return setting
+        end
+        if setting.settings then
+            result = wr_get_setting(name, setting.settings)
+            if result then return result end
+        end
+    end
+    return nil
+end
 
 -- This function is called to ensure the correct setting values are visible to
 -- the game via ModSettingGet(). your mod's settings don't work if you don't

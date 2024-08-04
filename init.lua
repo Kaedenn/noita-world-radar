@@ -72,7 +72,7 @@ end
 
 function OnWorldPostUpdate()
     if not imgui then
-        imgui = load_imgui({version="1.14.2", mod=MOD_ID})
+        imgui = load_imgui({version="1.17.0", mod=MOD_ID})
     end
 
     if not KPanel then

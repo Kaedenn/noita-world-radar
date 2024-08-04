@@ -1,15 +1,11 @@
 --[[
 The "Info" Panel: Display interesting information
 
-TODO: Nearby stuff should be drawn at the top
-
 TODO: Add "include all unknown spells" button
 TODO: Add "include all unkilled enemies" button
     These could be quite noisy for early-game
 
-TODO: Add treasure chest prediction to UI
-    Add Greater Treasure Chest resolution
-    Add drop scanning (wands, spells, potions, pouches, etc)
+TODO: Add treasure chest drop scanning (wands, spells, containers)
 
 TODO: Better feedback display for timed messages to show remaining time
     Show a line or a bar getting shorter? Like Twitch announcements
@@ -22,6 +18,9 @@ TODO: Allow user to configure how the on-screen text is displayed
     Configure anchoring: currently bottom-left, but add other three
     Configure location
 --]]
+
+dofile_once("data/scripts/lib/utilities.lua")
+-- luacheck: globals get_players
 
 nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
 smallfolk = dofile_once("mods/world_radar/files/lib/smallfolk.lua")
@@ -65,12 +64,14 @@ InfoPanel = {
         remove_item = MOD_ID .. ".remove_found_item",
         remove_material = MOD_ID .. ".remove_found_material",
         show_radar = MOD_ID .. ".show_radar",
+        range = MOD_ID .. ".radar_range",
     },
     config = {
         tooltip_wrap = 400,             -- Default hover tooltip wrap margin
         import_num_lines = 6,           -- Height of the import textarea
         message_timer = 60*10,          -- Default message time
         range = math.huge,              -- Range of the radar
+        range_rule = "infinite",        -- Range of the radar, overrides range
         rare_biome_mod = 0.2,           -- Modifiers below this are rare
         show_images = true,             -- Enable images
         rare_spells = {                 -- Default rare spell list
@@ -102,7 +103,7 @@ InfoPanel = {
             pad_bottom = 2,             -- Distance from bottom edge
         },
         icons = {
-            height = nil,               -- Causes height to be calculated
+            height = nil,               -- nil -> calculate height
         },
     },
     env = {
@@ -331,6 +332,42 @@ function InfoPanel:_get_item_by_name(iname)
         end
     end
     return {}
+end
+
+--[[ Range check: true if the entity is inside self.range ]]
+function InfoPanel:_range_check(entid_or_xy)
+    local ex, ey = nil, nil
+    if type(entid_or_xy) == "table" then
+        ex = entid_or_xy.x or entid_or_xy[1]
+        ey = entid_or_xy.y or entid_or_xy[2]
+    elseif type(entid_or_xy) == "number" then
+        ex, ey = EntityGetTransform(entid_or_xy)
+    end
+    if not ex or not ey then
+        print_error(("Failed to get location from %s"):format(entid_or_xy))
+        return false
+    end
+
+    local range_rule = self.config.range_rule
+    if range_rule == "infinite" then
+        return true
+    end
+
+    local range = self.config.range
+    if range_rule == "world" then
+        range = BiomeMapGetSize() * 512 / 2
+    elseif range_rule == "perk_range" then
+        range = 400
+    elseif range_rule == "onscreen" then
+        range = 200 -- TODO: Get screen size
+    elseif range_rule == "manual" then
+        -- Use self.config.range as-is
+    end
+
+    local px, py = EntityGetTransform(get_players()[1])
+    if not px or not py then return false end -- Player not loaded
+    local dist = math.sqrt(math.pow(px-ex, 2) + math.pow(py-ey, 2))
+    return dist <= range
 end
 
 --[[ Filter out entities that are children of the player or too far away ]]
@@ -869,8 +906,9 @@ end
 function InfoPanel:_draw_spell_list(imgui)
     local ret
     local to_remove = nil
-    local flags = imgui.WindowFlags.HorizontalScrollbar
-    if imgui.BeginChild("Spell List###spell_list", 0, 0, true, flags) then
+    --local cflags = imgui.ChildFlags.AutoResizeY
+    --local wflags = imgui.WindowFlags.HorizontalScrollbar
+    --if imgui.BeginChild("Spell List###spell_list", 0, 0, cflags, wflags) then
         for idx, entry in ipairs(self.env.spell_list) do
             if not entry.config then entry.config = {} end
             if imgui.SmallButton("Remove###remove_" .. entry.id) then
@@ -898,7 +936,7 @@ function InfoPanel:_draw_spell_list(imgui)
                 imgui.SameLine()
             end
             local label = entry.name
-            if label:match("^[$]") then
+            if label:match("^%$") then
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
@@ -908,8 +946,8 @@ function InfoPanel:_draw_spell_list(imgui)
         if to_remove ~= nil then
             table.remove(self.env.spell_list, to_remove)
         end
-        imgui.EndChild()
-    end
+    --    imgui.EndChild()
+    --end
 end
 
 function InfoPanel:_draw_material_dropdown(imgui)
@@ -1016,8 +1054,9 @@ end
 function InfoPanel:_draw_material_list(imgui)
     local ret
     local to_remove = nil
-    local flags = imgui.WindowFlags.HorizontalScrollbar
-    if imgui.BeginChild("Material List###material_list", 0, 0, true, flags) then
+    --local cflags = imgui.ChildFlags.AutoResizeY
+    --local wflags = imgui.WindowFlags.HorizontalScrollbar
+    --if imgui.BeginChild("Material List###material_list", 0, 0, cflags, wflags) then
         for idx, entry in ipairs(self.env.material_list) do
             if not entry.config then entry.config = {} end
             if imgui.SmallButton("Remove###remove_" .. entry.name) then
@@ -1043,8 +1082,8 @@ function InfoPanel:_draw_material_list(imgui)
         if to_remove ~= nil then
             table.remove(self.env.material_list, to_remove)
         end
-        imgui.EndChild()
-    end
+    --    imgui.EndChild()
+    --end
 end
 
 function InfoPanel:_draw_entity_dropdown(imgui)
@@ -1109,8 +1148,9 @@ end
 
 function InfoPanel:_draw_entity_list(imgui)
     local to_remove = nil
-    local flags = imgui.WindowFlags.HorizontalScrollbar
-    if imgui.BeginChild("Entity List###entity_list", 0, 0, true, flags) then
+    --local cflags = imgui.ChildFlags.AutoResizeY
+    --local wflags = imgui.WindowFlags.HorizontalScrollbar
+    --if imgui.BeginChild("Entity List###entity_list", 0, 0, cflags, wflags) then
         for idx, entry in ipairs(self.env.entity_list) do
             if not entry.config then entry.config = {} end
             local bid = ("Remove###remove_%s_%d"):format(entry.id, idx)
@@ -1135,8 +1175,8 @@ function InfoPanel:_draw_entity_list(imgui)
         if to_remove ~= nil then
             table.remove(self.env.entity_list, to_remove)
         end
-        imgui.EndChild()
-    end
+    --    imgui.EndChild()
+    --end
 end
 
 function InfoPanel:_draw_item_dropdown(imgui)
@@ -1144,21 +1184,38 @@ function InfoPanel:_draw_item_dropdown(imgui)
         label = "Item",
         var_prefix = "item",
         var_manage = "manage_items",
-        hover_text = "Item name or internal ID",
+        hover_text = function(imgui_, self_)
+            imgui_.Text("Item name, internal ID, or tag")
+            imgui_.Text("To match against tags, enter the tag in brackets like so:")
+            imgui_.Text("\t[wand]")
+            imgui_.Text("This will match all wands.")
+        end,
+        hover_config = {width=500},
     })
 
     if self.env.item_text ~= "" then
+        local tag = nil
+        if self.env.item_text:match("^%[") then
+            tag = self.env.item_text:gsub("[%[%]]", "")
+        end
+        local match_text = self.env.item_text:gsub("[^a-zA-Z0-9_ ]", "")
         local itemtab = self:_get_item_list()
         for _, entry in ipairs(itemtab) do
             local add_me = false
             local locname = GameTextGet(entry.name)
             if not locname or locname == "" then locname = entry.name end
-            if entry.name:match(self.env.item_text) then
+            if tag ~= nil then
+                for itag in entry.tags:gmatch("[^,]+") do
+                    if itag:match(tag) then
+                        add_me = true
+                    end
+                end
+            elseif entry.name:match(match_text) then
                 add_me = true
-            elseif entry.path:match(self.env.item_text) then
+            elseif entry.path:match(match_text) then
                 add_me = true
             elseif locname and locname ~= "" then
-                if locname:lower():match(self.env.item_text:lower()) then
+                if locname:lower():match(match_text:lower()) then
                     add_me = true
                 end
             end
@@ -1200,8 +1257,9 @@ end
 function InfoPanel:_draw_item_list(imgui)
     local ret
     local to_remove = nil
-    local flags = imgui.WindowFlags.HorizontalScrollbar
-    if imgui.BeginChild("Item List###item_list", 0, 0, true, flags) then
+    --local cflags = imgui.ChildFlags.AutoResizeY
+    --local wflags = imgui.WindowFlags.HorizontalScrollbar
+    --if imgui.BeginChild("Item List###item_list", 0, 0, cflags, wflags) then
         for idx, entry in ipairs(self.env.item_list) do
             if not entry.config then entry.config = {} end
             if imgui.SmallButton("Remove###remove_" .. entry.id) then
@@ -1224,7 +1282,7 @@ function InfoPanel:_draw_item_list(imgui)
                 imgui.SameLine()
             end
             local label = entry.name
-            if label:match("^[$]") then
+            if label:match("^%$") then
                 label = GameTextGet(entry.name)
                 if not label or label == "" then label = entry.name end
             end
@@ -1234,8 +1292,8 @@ function InfoPanel:_draw_item_list(imgui)
         if to_remove ~= nil then
             table.remove(self.env.item_list, to_remove)
         end
-        imgui.EndChild()
-    end
+    --    imgui.EndChild()
+    --end
 end
 
 --[[ Determine if we need to remove any list entries and do so ]]
@@ -1615,6 +1673,12 @@ function InfoPanel:on_draw_pre(imgui)
             self.env.do_debug = false
         end
 
+        imgui.SeparatorText("Configuration")
+        for key, val in pairs(self.config) do
+            imgui.Text(("self.config.%s = [%s]\"%s\""):format(
+                key, type(val), val))
+        end
+
         imgui.SeparatorText("Test Reward Formats")
         local reward = {}
         if imgui.Button("Entity") then
@@ -1932,6 +1996,9 @@ function InfoPanel:draw(imgui)
         self.config.icons.height = imgui.GetTextLineHeight()
     end
 
+    self.config.range_rule = conf_get(CONF.RADAR_RANGE)
+    self.config.range = tonumber(conf_get(CONF.RADAR_RANGE_MANUAL))
+
     self.host:text_clear()
     self.config.show_images = conf_get(CONF.SHOW_IMAGES)
     if self.config.show_images == nil then self.config.show_images = true end
@@ -1965,21 +2032,25 @@ function InfoPanel:draw(imgui)
 
     if self.env.manage_spells then
         self:_draw_spell_dropdown(imgui)
+        imgui.Separator()
         self:_draw_spell_list(imgui)
     end
 
     if self.env.manage_materials then
         self:_draw_material_dropdown(imgui)
+        imgui.Separator()
         self:_draw_material_list(imgui)
     end
 
     if self.env.manage_entities then
         self:_draw_entity_dropdown(imgui)
+        imgui.Separator()
         self:_draw_entity_list(imgui)
     end
 
     if self.env.manage_items then
         self:_draw_item_dropdown(imgui)
+        imgui.Separator()
         self:_draw_item_list(imgui)
     end
 
@@ -2134,16 +2205,19 @@ function InfoPanel:draw(imgui)
                 entname = EntityGetFilename(entities[1])
             end
             local iinfo = self:_get_item_by_name(entname)
-            local line = {
-                ("%dx"):format(#entities),
-                {name, image=iinfo.icon, fallback="data/ui_gfx/icon_unkown.png"},
-            }
-            self.host:p(line)
+
+            -- Print for things other than chests, as chests get special treatment
+            if not entity_is_chest(entities[0]) then
+                self.host:p({
+                    ("%dx"):format(#entities),
+                    {name, image=iinfo.icon, fallback="data/ui_gfx/icon_unkown.png"},
+                })
+            end
 
             for _, entity in ipairs(entities) do
                 local ex, ey = EntityGetTransform(entity)
                 local contents = {}
-                line = {
+                local line = {
                     {color="white", image=iinfo.icon},
                     {name, color="lightcyan"},
                     {("%d at {%d,%d}"):format(entity, ex, ey)}
@@ -2156,10 +2230,8 @@ function InfoPanel:draw(imgui)
                         func = function(this, ent, phost, pimgui)
                             local rewards = chest_get_rewards(ent)
                             for _, reward in ipairs(rewards) do
-                                this:message({
-                                    image=iinfo.icon,
-                                    this:_format_chest_reward(reward)
-                                })
+                                local rline = this:_format_chest_reward(reward)
+                                this:message({image=iinfo.icon, rline})
                             end
                         end,
                         small = true,

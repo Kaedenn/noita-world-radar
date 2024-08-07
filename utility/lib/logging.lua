@@ -8,6 +8,7 @@
 --]]
 
 logger = {
+    ERROR = 5,
     WARNING = 10,
     INFO = 20,
     DEBUG = 30,
@@ -28,9 +29,11 @@ logger = {
     debug = nil, -- Set below
     info = nil, -- Set below
     warning = nil, -- Set below
+    error = nil, -- Set below
 }
 
 logger.LEVELS = {
+    [logger.ERROR] = {number=logger.ERROR, name="error"},
     [logger.WARNING] = {number=logger.WARNING, name="warning"},
     [logger.INFO] = {number=logger.INFO, name="info"},
     [logger.DEBUG] = {number=logger.DEBUG, name="debug"},

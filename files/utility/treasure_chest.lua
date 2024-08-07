@@ -471,7 +471,7 @@ function do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, set_rand_)
             end
         elseif rnd <= 60 then
             rnd = Random(0, 100)
-            reward.type = "entity"
+            reward.type = "item"
             if rnd <= 89 then
                 reward.name = "$item_heart"
                 reward.entity = "data/entities/items/pickup/heart.xml"

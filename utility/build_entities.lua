@@ -30,6 +30,8 @@
 -- from the base entirely.
 --]]
 
+-- FIXME: SpriteComponent lookup broken for icons
+
 local self_name = arg[0]:gsub(".*\\/", "")
 local base_path = arg[0]:gsub("[\\/][^\\/]+.lua$", "")
 package.path = package.path .. ";" .. table.concat({
@@ -111,6 +113,24 @@ options:
     end
 
     return args
+end
+
+--[[ Trivial function to convert a table to a string ]]
+local function table_to_string(tbl)
+    local entries = {}
+    for key, val in pairs(tbl) do
+        if type(val) == "table" then
+            table.insert(entries, ("%s=%s"):format(key, table_to_string(val)))
+        elseif type(val) == "number" then
+            table.insert(entries, ("%s=%s"):format(key, val))
+        elseif type(val) == "boolean" then
+            table.insert(entries, ("%s=%s"):format(key, val and "true" or "false"))
+        else
+            table.insert(entries, ("%s=%q"):format(key, val))
+        end
+    end
+    table.sort(entries)
+    return "{" .. table.concat(entries, ", ") .. "}"
 end
 
 --[[ Read the icon file into a usable table ]]
@@ -296,6 +316,49 @@ local function parse_icon_xml(file_path)
     return ""
 end
 
+--[[ Build an entity table from the given xml ]]
+local function build_entity_entry(xml, filename)
+    local damage = xml_lookup(xml, "DamageModelComponent")
+    local sprite = xml_lookup(xml, "SpriteComponent")
+    local genome = xml_lookup(xml, "GenomeDataComponent")
+    local function nonempty(value) return value and value ~= "" end
+
+    local id = filename:gsub("^.*%/", ""):gsub("%.xml$", "")
+    local name = id
+
+    if nonempty(xml.attr.name) then
+        name = xml.attr.name
+    end
+
+    local icon = nil
+    if sprite and nonempty(sprite.attr.image_file) then
+        icon = sprite.attr.image_file
+    end
+
+    local health = nil
+    if damage and nonempty(damage.attr.hp) then
+        health = damage.attr.hp
+    end
+
+    local herd = nil
+    if genome and nonempty(genome.attr.herd_id) then
+        herd = genome.attr.herd_id
+    end
+
+    local entry = {
+        id = id,
+        name = name,
+        path = filename,
+        icon = icon,
+        data = {
+            health = health,
+            herd = herd,
+        },
+    }
+    logger.debug(table_to_string(entry))
+    return entry
+end
+
 function main()
     local argv = parse_argv(arg)
 
@@ -304,7 +367,6 @@ function main()
     }, minifs.PATH_SEPARATOR)
     logger.debug("Searching for xml files in " .. data)
 
-    logger.info(kae.table.tostring(argv.trace_files))
     local trace_files = {}
     for _, name in ipairs(argv.trace_files) do trace_files[name] = name end
 
@@ -317,9 +379,9 @@ function main()
 
     local entlist = {}
     for _, name in ipairs(find_with_extension(data, "xml")) do
-        local pathcomps = minifs.splitpath(name)
-        local basename = pathcomps[#pathcomps]
-        logger.info("Reading XML file " .. name .. " as " .. basename)
+        local filename = name:match("[/\\](data[/\\].*)")
+        local basename = name:match("[^/\\]+$")
+        logger.info("Reading XML file " .. name)
         local root = nxml.parse(read_file(name))
         if root.name ~= "Entity" then goto continue end
 
@@ -332,20 +394,30 @@ function main()
 
         local ename = root.attr.name
         if not ename then
-            logger.error(("File %s root attribute lacks name"):format(name))
+            logger.warning(("File %s root attribute lacks name"):format(name))
             goto continue
         end
-        local fpath = name:match("[/\\](data[/\\].*)")
-        if ename == "$animal_lukki" and fpath:match("chest_leggy%.xml") then
-            ename = "$animal_chest_leggy"
+
+        local entry = build_entity_entry(root, filename)
+
+        if entry.name == "$animal_lukki" and filename:match("chest_leggy%.xml") then
+            entry.name = "$animal_chest_leggy"
+        end
+
+        if icons[entry.id] then
+            entry.icon = icons[entry.id]
+        elseif icons[entry.name:gsub("^%$animal_", "")] then
+            entry.icon = icons[entry.name:gsub("^%$animal_", "")]
+        else
+            entry.icon = ""
         end
 
         if ename:match("^[$]animal_") then
-            logger.debug("File %s at %q defines entity %q", fpath, name, ename)
-            table.insert(entlist, {fpath, ename})
+            logger.debug("File %s at %q defines entity %q", filename, name, ename)
+            table.insert(entlist, entry)
         else
             logger.debug("File %s at %q defines non-entity %q; skipping",
-                fpath, name, ename)
+                filename, name, ename)
         end
         ::continue::
     end
@@ -361,14 +433,8 @@ function main()
 return {
 ]]):format(self_name))
     for _, entry in ipairs(entlist) do
-        local entpath, entname = unpack(entry)
-        local entid = string.match(entpath, "([^/]*)%.xml$")
-        local icon = icons[entid] or ""
-        if icon == "" then
-            icon = icons[entname:gsub("^[$]animal_", "")] or ""
-        end
-        ofile:write(([[  {id=%q, name=%q, path=%q, icon=%q},
-]]):format(entid, entname, entpath, icon))
+        ofile:write("  " .. table_to_string(entry) .. ",")
+        ofile:write("\n")
     end
     ofile:write([[
 }

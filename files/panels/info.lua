@@ -1,9 +1,11 @@
 --[[
 The "Info" Panel: Display interesting information
 
-TODO: Add "include all unknown spells" button
-TODO: Add "include all unkilled enemies" button
+IDEA: Add "include all unknown spells" button
+IDEA: Add "include all unkilled enemies" button
     These could be quite noisy for early-game
+
+IDEA: Limit menu choices to discovered things
 
 TODO: Add treasure chest drop scanning (wands, spells, containers)
 
@@ -390,71 +392,9 @@ function InfoPanel:_get_nearby_items()
     return self:_filter_entries(get_with_tags({"item_pickup"}))
 end
 
---[[ Search for nearby desirable items ]]
-function InfoPanel:_find_items()
-    local items = {}
-    for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
-        local entity, name = unpack(item)
-        for _, entry in ipairs(self.env.item_list) do
-            local iname = entry.name
-            if name:match(iname) or name:match(GameTextGet(iname)) then
-                table.insert(items, {entity=entity, name=name, entry=entry})
-            end
-        end
-    end
-    return items
-end
-
---[[ Locate any flasks/pouches containing rare materials ]]
-function InfoPanel:_find_containers()
-    local containers = {}
-    for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
-        local entity, name = unpack(item)
-        local contents = container_get_contents(entity)
-        local rare_mats = {}
-        for _, material in ipairs(self.env.material_list) do
-            if contents[material.name] and contents[material.name] > 0 then
-                table.insert(rare_mats, material)
-            end
-        end
-        if #rare_mats > 0 then
-            table.insert(containers, {
-                entity = entity,
-                name = name,
-                contents = contents,
-                rare_contents = rare_mats,
-            })
-        end
-    end
-    return containers
-end
-
 --[[ Get all nearby enemies ]]
 function InfoPanel:_get_nearby_enemies()
     return self:_filter_entries(get_with_tags({"enemy"}))
-end
-
---[[ Locate any rare enemies nearby ]]
-function InfoPanel:_find_enemies()
-    local enemies = {}
-    local rare_ents = {}
-    for _, entry in ipairs(self.env.entity_list) do
-        rare_ents[entry.path] = entry
-    end
-    for _, enemy in ipairs(self:_get_nearby_enemies()) do
-        local entity, name = unpack(enemy)
-        local entfname = EntityGetFilename(entity)
-        if rare_ents[entfname] then
-            local entry = {}
-            for key, val in ipairs(rare_ents[entfname]) do
-                entry[key] = val
-            end
-            entry.entity = entity
-            entry.name = name
-            table.insert(enemies, entry)
-        end
-    end
-    return enemies
 end
 
 --[[ Search for nearby desirable spells ]]
@@ -497,6 +437,70 @@ function InfoPanel:_find_spells()
             end
         end
     end
+end
+
+--[[ Locate any flasks/pouches containing rare materials ]]
+function InfoPanel:_find_containers()
+    local containers = {}
+    for _, item in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
+        local entity, name = unpack(item)
+        local contents = container_get_contents(entity)
+        local rare_mats = {}
+        for _, material in ipairs(self.env.material_list) do
+            if contents[material.name] and contents[material.name] > 0 then
+                table.insert(rare_mats, material)
+            end
+        end
+        if #rare_mats > 0 then
+            table.insert(containers, {
+                entity = entity,
+                name = name,
+                contents = contents,
+                rare_contents = rare_mats,
+            })
+        end
+    end
+    return containers
+end
+
+--[[ Locate any rare enemies nearby ]]
+function InfoPanel:_find_enemies()
+    local enemies = {}
+    local rare_ents = {}
+    for _, entry in ipairs(self.env.entity_list) do
+        rare_ents[entry.path] = entry
+    end
+    for _, enemy in ipairs(self:_get_nearby_enemies()) do
+        local entity, name = unpack(enemy)
+        local entfname = EntityGetFilename(entity)
+        if rare_ents[entfname] then
+            local entry = {}
+            entry.entity = entity
+            entry.name = name
+            entry.path = entfname
+            for key, val in ipairs(rare_ents[entfname]) do
+                entry[key] = val
+            end
+            table.insert(enemies, entry)
+        end
+    end
+    return enemies
+end
+
+--[[ Search for nearby desirable items ]]
+function InfoPanel:_find_items()
+    local items = {}
+    for _, itempair in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
+        local entity, name = unpack(itempair)
+        local entry = {entity=entity, name=name, path=EntityGetFilename(entity)}
+        for _, item in ipairs(self.env.item_list) do
+            if entry.path == item.path then
+                entry.entry = item
+                table.insert(items, entry)
+            end
+        end
+    end
+    return items
 end
 
 --[[ Draw the on-screen UI and the radar indicators, if enabled ]]
@@ -1506,12 +1510,6 @@ function InfoPanel:_format_chest_reward(reward)
     local rentities = reward.entities or {}
     local ramount = reward.amount or 0
     rname = rname:gsub("%$[a-z0-9_]+", GameTextGet)
-    if rname:match("^%$") then
-        local name = GameTextGet(rname)
-        if name and name ~= "" then
-            rname = name
-        end
-    end
 
     local line = {}
     if rtype == REWARD.WAND then -- TODO
@@ -1564,10 +1562,28 @@ function InfoPanel:_format_chest_reward(reward)
         })
     elseif rtype == REWARD.CONVERT then -- TODO
         table.insert(line, ("Convert entity to %s"):format(rname))
-    elseif rtype == REWARD.ITEM then -- TODO
-        table.insert(line, ("Item: %s [%s]"):format(rname, rentity))
-    elseif rtype == REWARD.ENTITY then -- TODO
-        table.insert(line, ("Entity: %s [%s]"):format(rname, rentity))
+    elseif rtype == REWARD.ITEM then
+        local iinfo = self:_get_item_by_name(rentity)
+        table.insert(line, {
+            {"Item"},
+            {
+                image=iinfo.icon,
+                fallback="data/ui_gfx/icon_unkown.png",
+                color="lightcyan",
+                rname,
+            },
+        })
+    elseif rtype == REWARD.ENTITY then
+        local einfo = self:_get_entity_by_name(rentity)
+        table.insert(line, {
+            {"Entity"},
+            {
+                image=einfo.icon,
+                fallback="data/ui_gfx/icon_unkown.png",
+                color="lightcyan",
+                rname,
+            },
+        })
     elseif rtype == REWARD.POTION or rtype == REWARD.POUCH then
         local iinfo = self:_get_item_by_name(rentity)
         local minfo = self:_get_material_by_name(reward.content)
@@ -1647,7 +1663,7 @@ function InfoPanel:message(contents, timer)
     text = text:gsub("[ ]+$", "")
     GamePrint(text)
 
-    if self.env.do_debug then
+    if self.do_debug then
         local debug_msg = smallfolk.dumps(contents)
         print(("InfoPanel:message(%s, %d)"):format(debug_msg, duration))
     end
@@ -1659,7 +1675,7 @@ end
 -- Note: called *outside* the PushID/PopID guard!
 --]]
 function InfoPanel:on_draw_pre(imgui)
-    if not self.env.do_debug then return end
+    if not self.do_debug then return end
     local tables = {
         {"Spell", "spell_list"},
         {"Material", "material_list"},
@@ -1668,129 +1684,130 @@ function InfoPanel:on_draw_pre(imgui)
     }
     local flags = bit.bor(
         imgui.WindowFlags.HorizontalScrollbar)
-    if imgui.Begin("Info Panel Debugging Window", nil, flags) then
-        if imgui.Button("Close") then
-            self.env.do_debug = false
-        end
-
-        imgui.SeparatorText("Configuration")
-        for key, val in pairs(self.config) do
-            imgui.Text(("self.config.%s = [%s]\"%s\""):format(
-                key, type(val), val))
-        end
-
-        imgui.SeparatorText("Test Reward Formats")
-        local reward = {}
-        if imgui.Button("Entity") then
-            reward.type = "entity"
-            reward.name = "$item_heart"
-            reward.entity = "data/entities/items/pickup/heart.xml"
-        end
-        imgui.SameLine()
-        if imgui.Button("Gold") then
-            reward.type = "gold"
-            reward.name = "$item_goldnugget"
-            reward.amount = 1200
-        end
-        imgui.SameLine()
-        if imgui.Button("Wand") then
-            reward.type = "wand"
-            reward.name = "$item_wand (level 4)"
-            reward.entity = "data/entities/items/wand_level_04.xml"
-        end
-        imgui.SameLine()
-        if imgui.Button("Card") then
-            reward.type = "card"
-            reward.name = "random spell"
-            reward.amount = 3
-            reward.entities = {
-                "MANA_REDUCE",
-                "ADD_TRIGGER",
-                "BLACK_HOLE"
-            }
-        end
-
-        if imgui.Button("Item") then
-            reward.type = "item"
-            reward.name = "$item_waterstone"
-            reward.entity = "data/entities/items/pickup/waterstone.xml"
-        end
-        imgui.SameLine()
-        if imgui.Button("Potion") then
-            reward.type = "potion"
-            reward.name = "$item_potion"
-            reward.entity = "data/entities/items/pickup/potion.xml"
-            reward.content = "water"
-        end
-        imgui.SameLine()
-        if imgui.Button("Pouch") then
-            reward.type = "pouch"
-            reward.name = "$item_powder_stash_3"
-            reward.entity = "data/entities/items/pickup/powder_stash.xml"
-        end
-        imgui.SameLine()
-        if imgui.Button("Reroll") then
-            reward.type = "reroll"
-            reward.amount = 2
-        end
-
-        if imgui.Button("Convert") then
-            reward.type = "convert"
-            reward.name = "$mat_gold"
-        end
-        imgui.SameLine()
-        if imgui.Button("Potions") then
-            reward.type = "potions"
-            reward.name = "$item_potion"
-            reward.entities = {
-                "data/entities/items/pickup/potion_secret.xml",
-                "data/entities/items/pickup/potion_secret.xml",
-                "data/entities/items/pickup/potion_random_material.xml",
-            }
-            reward.contents = {
-                "magic_liquid_hp_regeneration_unstable",
-                "glowshroom",
-                "grass_holy",
-            }
-            reward.amount = #reward.contents
-        end
-        imgui.SameLine()
-        if imgui.Button("Goldrain") then
-            reward.type = "goldrain"
-            reward.name = "gold rain"
-            reward.entity = "data/entities/projectiles/rain_gold.xml"
-        end
-        imgui.SameLine()
-        if imgui.Button("Sampo") then
-            reward.type = "sampo"
-        end
-        if reward.type then
-            for _, piece in ipairs(self:_format_chest_reward(reward)) do
-                self:message(piece)
+    local show, is_open = imgui.Begin("World Radar Debug", true, flags)
+    if not is_open then
+        self.do_debug = false
+    elseif show then
+        if imgui.CollapsingHeader("Configuration") then
+            for key, val in pairs(self.config) do
+                imgui.Text(("self.config.%s = [%s]\"%s\""):format(
+                    key, type(val), val))
             end
         end
 
-        imgui.SeparatorText("Table Management")
+        if imgui.CollapsingHeader("Test Reward Formats") then
+            local reward = {}
+            if imgui.Button("Entity") then
+                reward.type = "entity"
+                reward.name = "$animal_dark_alchemist (heart mimic)"
+                reward.entity = "data/entities/animals/illusions/dark_alchemist.xml"
+            end
+            imgui.SameLine()
+            if imgui.Button("Gold") then
+                reward.type = "gold"
+                reward.name = "$item_goldnugget"
+                reward.amount = 1200
+            end
+            imgui.SameLine()
+            if imgui.Button("Wand") then
+                reward.type = "wand"
+                reward.name = "$item_wand (level 4)"
+                reward.entity = "data/entities/items/wand_level_04.xml"
+            end
+            imgui.SameLine()
+            if imgui.Button("Card") then
+                reward.type = "card"
+                reward.name = "random spell"
+                reward.amount = 3
+                reward.entities = {
+                    "MANA_REDUCE",
+                    "ADD_TRIGGER",
+                    "BLACK_HOLE"
+                }
+            end
 
-        if imgui.Button("Copy Entire Environment") then
-            local text = smallfolk.dumps(self.env)
-            imgui.SetClipboardText(text)
-            self.host:p(("Exported entire environment (%d bytes)"):format(#text))
+            if imgui.Button("Item") then
+                reward.type = "item"
+                reward.name = "$item_waterstone"
+                reward.entity = "data/entities/items/pickup/waterstone.xml"
+            end
+            imgui.SameLine()
+            if imgui.Button("Potion") then
+                reward.type = "potion"
+                reward.name = "$item_potion"
+                reward.entity = "data/entities/items/pickup/potion.xml"
+                reward.content = "water"
+            end
+            imgui.SameLine()
+            if imgui.Button("Pouch") then
+                reward.type = "pouch"
+                reward.name = "$item_powder_stash_3"
+                reward.entity = "data/entities/items/pickup/powder_stash.xml"
+            end
+            imgui.SameLine()
+            if imgui.Button("Reroll") then
+                reward.type = "reroll"
+                reward.amount = 2
+            end
+
+            if imgui.Button("Convert") then
+                reward.type = "convert"
+                reward.name = "$mat_gold"
+            end
+            imgui.SameLine()
+            if imgui.Button("Potions") then
+                reward.type = "potions"
+                reward.name = "$item_potion"
+                reward.entities = {
+                    "data/entities/items/pickup/potion_secret.xml",
+                    "data/entities/items/pickup/potion_secret.xml",
+                    "data/entities/items/pickup/potion_random_material.xml",
+                }
+                reward.contents = {
+                    "magic_liquid_hp_regeneration_unstable",
+                    "glowshroom",
+                    "grass_holy",
+                }
+                reward.amount = #reward.contents
+            end
+            imgui.SameLine()
+            if imgui.Button("Goldrain") then
+                reward.type = "goldrain"
+                reward.name = "gold rain"
+                reward.entity = "data/entities/projectiles/rain_gold.xml"
+            end
+            imgui.SameLine()
+            if imgui.Button("Sampo") then
+                reward.type = "sampo"
+            end
+            if reward.type then
+                for _, piece in ipairs(self:_format_chest_reward(reward)) do
+                    self:message(piece)
+                end
+            end
         end
 
-        for _, table_info in ipairs(tables) do
-            local tbl_name, tbl_var = unpack(table_info)
-            if imgui.Button(("Copy %s List"):format(tbl_name)) then
-                imgui.SetClipboardText(smallfolk.dumps(self.env[tbl_name]))
-                self.host:print(("Copied %s (%d entries) to the clipboard"):format(
-                    tbl_var, #self.env[tbl_var]))
+        if imgui.CollapsingHeader("Table Management") then
+            if imgui.Button("Copy Entire Environment") then
+                local text = smallfolk.dumps(self.env)
+                imgui.SetClipboardText(text)
+                self.host:p(("Exported entire environment (%d bytes)"):format(#text))
             end
-            local entries = self.env[tbl_var]
-            imgui.Text(("%s[%d] = {"):format(tbl_var, #entries))
-            for _, entry in ipairs(entries) do
-                imgui.Text(("    %s,"):format(smallfolk.dumps(entry)))
+
+            for _, table_info in ipairs(tables) do
+                local tbl_name, tbl_var = unpack(table_info)
+                if imgui.Button(("Copy %s List"):format(tbl_name)) then
+                    imgui.SetClipboardText(smallfolk.dumps(self.env[tbl_name]))
+                    self.host:print(("Copied %s (%d entries) to the clipboard"):format(
+                        tbl_var, #self.env[tbl_var]))
+                end
+                local entries = self.env[tbl_var]
+                imgui.Text(("%s[%d] = {"):format(tbl_var, #entries))
+                for _, entry in ipairs(entries) do
+                    imgui.Text(("    %s,"):format(smallfolk.dumps(entry)))
+                end
+                imgui.Text("}")
             end
-            imgui.Text("}")
         end
 
         imgui.End()
@@ -1804,7 +1821,8 @@ function InfoPanel:init(environ, host, config)
     self.biomes = _get_biome_data()
     self.gui = GuiCreate()
 
-    self.env.do_debug = false
+    self.debug = {}
+    self.do_debug = false
 
     for _, bpair in ipairs(self.modes) do
         local mname, varname, default = unpack(bpair)
@@ -1907,10 +1925,8 @@ function InfoPanel:draw_menu(imgui)
             end
         end
         imgui.Separator()
-        local mlabel = ("%s Internal Debugging"):format(
-            self.env.do_debug and "Disable" or "Enable")
-        if imgui.MenuItem(mlabel) then
-            self.env.do_debug = not self.env.do_debug
+        if imgui.MenuItem("Toggle Internal Debugging") then
+            self.do_debug = not self.do_debug
         end
         imgui.EndMenu()
     end
@@ -2084,8 +2100,15 @@ function InfoPanel:draw(imgui)
                 self.host:p({separator_text="Found something!!", color="yellow"})
                 found_something = true
             end
-            -- TODO: Add formatting
-            self.host:p(("%s detected nearby!!"):format(entry.name))
+            local entinfo = entry.entry
+            self.host:p({
+                {
+                    image=entinfo.icon,
+                    fallback="data/ui_gfx/icon_unkown.png",
+                    entry.name,
+                },
+                "detected nearby!!",
+            })
         end
     end
 
@@ -2095,11 +2118,7 @@ function InfoPanel:draw(imgui)
                 self.host:p({separator_text="Found something!!", color="yellow"})
                 found_something = true
             end
-            local entname = EntityGetFilename(entity.entity)
-            local entinfo = {}
-            if entname and entname ~= "" then
-                entinfo = self:_get_entity_by_name(entname)
-            end
+            local entinfo = self:_get_entity_by_name(entity.path)
             local line = {
                 {
                     image=entinfo.icon,
@@ -2207,21 +2226,34 @@ function InfoPanel:draw(imgui)
             local iinfo = self:_get_item_by_name(entname)
 
             -- Print for things other than chests, as chests get special treatment
-            if not entity_is_chest(entities[0]) then
+            if not entity_is_chest(entities[1]) then
                 self.host:p({
                     ("%dx"):format(#entities),
-                    {name, image=iinfo.icon, fallback="data/ui_gfx/icon_unkown.png"},
+                    {
+                        name,
+                        image=iinfo.icon,
+                        fallback="data/ui_gfx/icon_unkown.png",
+                        color="lightcyan",
+                    },
                 })
             end
 
             for _, entity in ipairs(entities) do
                 local ex, ey = EntityGetTransform(entity)
                 local contents = {}
-                local line = {
-                    {color="white", image=iinfo.icon},
-                    {name, color="lightcyan"},
-                    {("%d at {%d,%d}"):format(entity, ex, ey)}
-                }
+                local line = {}
+                table.insert(line, {
+                    image=iinfo.icon,
+                    fallback="data/ui_gfx/icon_unkown.png",
+                    color="white",
+                })
+                table.insert(line, {name, color="lightcyan"})
+                if self.host.debugging then
+                    table.insert(line, {
+                        ("%d at {%d,%d}"):format(entity, ex, ey),
+                        color=self.host.colors.debug
+                    })
+                end
                 -- TODO: Make this available to the search functions
                 if entity_is_chest(entity) then
                     line[1].button = {

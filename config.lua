@@ -17,6 +17,10 @@ CONF = {
     RADAR_RANGE = "radar_range",
     RADAR_RANGE_MANUAL = "radar_range_manual",
     GUI_ANCHOR = "gui_anchor",
+
+    ORB_ENABLE = "orb_enable",
+    ORB_LIMIT = "orb_limit",
+    ORB_DISPLAY = "orb_display",
 }
 
 function conf_get(key)

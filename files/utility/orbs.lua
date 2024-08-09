@@ -42,6 +42,20 @@ function world_get_number(world_name)
     return nil
 end
 
+--[[ Convert a world number to a name ]]
+function world_get_name(world_number)
+    if world_number < 0 then
+        return WORLD_WEST
+    end
+    if world_number == 0 then
+        return WORLD_MAIN
+    end
+    if world_number > 0 then
+        return WORLD_EAST
+    end
+    return nil
+end
+
 --[[ Split an orb ID into a (orb index, world number) pair ]]
 function orb_id_split(orbid)
     local orb_num = orbid % ORB_MAX

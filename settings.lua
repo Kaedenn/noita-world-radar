@@ -135,6 +135,48 @@ mod_settings = {
             --]]
         },
     },
+
+    {
+        category_id = "orb_settings",
+        ui_name = "Orb Radar Settings",
+        settings = {
+            {
+                id = "orb_enable",
+                ui_name = "Orb Radar",
+                ui_description = [[Add icons around the player indicating where the orbs are.
+This will tell you where the nearest (uncollected) orbs are.
+
+Note: Orb locations are only approximate! Due to how the game handles
+orb spawns, orb locations can be off by at most 256 pixels (or about
+half a screen).]],
+                value_default = false,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            {
+                id = "orb_limit",
+                ui_name = "Orb Selection",
+                ui_description = "Which orbs should be considered for display?",
+                value_default = "world",
+                values = {
+                    {"world", "Current World Only"},
+                    {"main", "Main World Only"},
+                    {"parallel", "Parallel Worlds Only"},
+                    {"both", "Both Main and Parallel"},
+                },
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            {
+                id = "orb_display",
+                ui_name = "Orb Display",
+                ui_description = "How many orbs should be displayed?",
+                value_default = 1,
+                value_min = 1,
+                value_max = 33,
+                value_display_multiplier = 1,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+        },
+    },
 }
 
 function wr_get_setting(name, setting_list)

@@ -22,13 +22,13 @@ TODO: Allow user to configure how the on-screen text is displayed
 --]]
 
 dofile_once("data/scripts/lib/utilities.lua")
--- luacheck: globals get_players
+-- luacheck: globals get_players check_parallel_pos
 
 nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
 smallfolk = dofile_once("mods/world_radar/files/lib/smallfolk.lua")
 
 dofile_once("mods/world_radar/config.lua")
--- luacheck: globals MOD_ID CONF conf_get
+-- luacheck: globals MOD_ID CONF conf_get conf_set
 dofile_once("mods/world_radar/files/utility/biome.lua")
 -- luacheck: globals biome_is_default biome_is_common biome_modifier_get
 dofile_once("mods/world_radar/files/utility/entity.lua")
@@ -39,10 +39,14 @@ dofile_once("mods/world_radar/files/utility/spell.lua")
 -- luacheck: globals card_get_spell wand_get_spells spell_is_always_cast spell_get_name spell_get_data action_lookup
 dofile_once("mods/world_radar/files/utility/treasure_chest.lua")
 -- luacheck: globals entity_is_chest chest_get_rewards REWARD
+dofile_once("mods/world_radar/files/utility/orbs.lua")
+-- luacheck: globals Orbs world_get_name make_distance_sorter
 dofile_once("mods/world_radar/files/radar.lua")
--- luacheck: globals Radar RADAR_KIND_SPELL RADAR_KIND_ENTITY RADAR_KIND_MATERIAL RADAR_KIND_ITEM
+-- luacheck: globals Radar RADAR_KIND_SPELL RADAR_KIND_ENTITY RADAR_KIND_MATERIAL RADAR_KIND_ITEM RADAR_ORB
 dofile_once("mods/world_radar/files/lib/utility.lua")
 -- luacheck: globals table_clear table_empty table_has_entry split_string
+
+NOWRAP = {wrap=0}
 
 --[[ Panel class with default values.
 --
@@ -503,6 +507,48 @@ function InfoPanel:_find_items()
     return items
 end
 
+--[[ Draw the orb radar ]]
+function InfoPanel:_draw_orb_radar()
+    local enable = conf_get(CONF.ORB_ENABLE)
+    if not enable then
+        return
+    end
+
+    local limit = conf_get(CONF.ORB_LIMIT)
+    local display = conf_get(CONF.ORB_DISPLAY)
+
+    local player = get_players()[1]
+    local px, py = EntityGetTransform(player)
+    if px == nil or py == nil then
+        return
+    end
+
+    local orb_list = Orbs.list
+    if limit == "world" then
+        local world = world_get_name(check_parallel_pos(px))
+        orb_list = Orbs:get_within(world)
+    elseif limit == "main" then
+        orb_list = Orbs:get_main()
+    elseif limit == "parallel" then
+        orb_list = Orbs:get_parallel()
+    elseif limit == "both" then
+        orb_list = Orbs.list
+    end
+
+    table.sort(orb_list, make_distance_sorter(px, py))
+
+    for idx = 1, math.min(display, #orb_list) do
+        local orb_x, orb_y = unpack(orb_list[idx]:pos())
+        Radar:configure{
+            range=1024,
+            range_medium=1024*0.25,
+            range_faint=1024*0.5,
+            next_only=true
+        }
+        Radar:draw_for_pos(orb_x, orb_y, RADAR_ORB)
+    end
+end
+
 --[[ Draw the on-screen UI and the radar indicators, if enabled ]]
 function InfoPanel:_draw_onscreen_gui()
     if not self.gui then self.gui = GuiCreate() end
@@ -896,12 +942,12 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                 imgui.SameLine()
                 if entry.icon and self.config.show_images then
                     self.host:draw_image(imgui, entry.icon, true)
-                    self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
+                    self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
                     imgui.SameLine()
                 end
                 if not locname or locname == "" then locname = entry.name end
                 imgui.Text(("%s (%s)"):format(locname, entry.id))
-                self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
+                self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
             end
         end
     end
@@ -910,48 +956,44 @@ end
 function InfoPanel:_draw_spell_list(imgui)
     local ret
     local to_remove = nil
-    --local cflags = imgui.ChildFlags.AutoResizeY
-    --local wflags = imgui.WindowFlags.HorizontalScrollbar
-    --if imgui.BeginChild("Spell List###spell_list", 0, 0, cflags, wflags) then
-        for idx, entry in ipairs(self.env.spell_list) do
-            if not entry.config then entry.config = {} end
-            if imgui.SmallButton("Remove###remove_" .. entry.id) then
-                to_remove = idx
-            end
-            imgui.SameLine()
-            local keep = entry.config.keep == 1
-            ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
-            if ret then
-                entry.config.keep = keep and 1 or 0
-            end
-            self:_draw_hover_tooltip(imgui, "If checked, do not remove this spell upon pickup")
-            imgui.SameLine()
-            local ignore_ac = entry.config.ignore_ac == 1
-            ret, ignore_ac = imgui.Checkbox("###ignore_ac_" .. entry.id, ignore_ac)
-            if ret then
-                entry.config.ignore_ac = ignore_ac and 1 or 0
-            end
-            self:_draw_hover_tooltip(imgui, "If checked, do not match if the spell is an Always Cast spell")
-            imgui.SameLine()
-            local hover_func = self:_make_spell_tooltip_func(entry)
-            if entry.icon and self.config.show_images then
-                self.host:draw_image(imgui, entry.icon, true)
-                self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
-                imgui.SameLine()
-            end
-            local label = entry.name
-            if label:match("^%$") then
-                label = GameTextGet(entry.name)
-                if not label or label == "" then label = entry.name end
-            end
-            imgui.Text(("%s [%s]"):format(label, entry.id))
-            self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
+    imgui.SeparatorText("Spell List")
+    for idx, entry in ipairs(self.env.spell_list) do
+        if not entry.config then entry.config = {} end
+        if imgui.SmallButton("Remove###remove_" .. entry.id) then
+            to_remove = idx
         end
-        if to_remove ~= nil then
-            table.remove(self.env.spell_list, to_remove)
+        imgui.SameLine()
+        local keep = entry.config.keep == 1
+        ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
+        if ret then
+            entry.config.keep = keep and 1 or 0
         end
-    --    imgui.EndChild()
-    --end
+        self:_draw_hover_tooltip(imgui, "If checked, do not remove this spell upon pickup")
+        imgui.SameLine()
+        local ignore_ac = entry.config.ignore_ac == 1
+        ret, ignore_ac = imgui.Checkbox("###ignore_ac_" .. entry.id, ignore_ac)
+        if ret then
+            entry.config.ignore_ac = ignore_ac and 1 or 0
+        end
+        self:_draw_hover_tooltip(imgui, "If checked, do not match if the spell is an Always Cast spell")
+        imgui.SameLine()
+        local hover_func = self:_make_spell_tooltip_func(entry)
+        if entry.icon and self.config.show_images then
+            self.host:draw_image(imgui, entry.icon, true)
+            self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
+            imgui.SameLine()
+        end
+        local label = entry.name
+        if label:match("^%$") then
+            label = GameTextGet(entry.name)
+            if not label or label == "" then label = entry.name end
+        end
+        imgui.Text(("%s [%s]"):format(label, entry.id))
+        self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
+    end
+    if to_remove ~= nil then
+        table.remove(self.env.spell_list, to_remove)
+    end
 end
 
 function InfoPanel:_draw_material_dropdown(imgui)
@@ -1044,11 +1086,11 @@ function InfoPanel:_draw_material_dropdown(imgui)
             local hover_tooltip_func = self:_make_material_tooltip_func(entry)
             if maticon and self.config.show_images then
                 self.host:draw_image(imgui, maticon, true)
-                self:_draw_hover_tooltip(imgui, hover_tooltip_func, {wrap=0})
+                self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
                 imgui.SameLine()
             end
             imgui.Text(("%s (%s)"):format(matlocname, matname))
-            self:_draw_hover_tooltip(imgui, hover_tooltip_func, {wrap=0})
+            self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
 
             ::continue::
         end
@@ -1058,36 +1100,32 @@ end
 function InfoPanel:_draw_material_list(imgui)
     local ret
     local to_remove = nil
-    --local cflags = imgui.ChildFlags.AutoResizeY
-    --local wflags = imgui.WindowFlags.HorizontalScrollbar
-    --if imgui.BeginChild("Material List###material_list", 0, 0, cflags, wflags) then
-        for idx, entry in ipairs(self.env.material_list) do
-            if not entry.config then entry.config = {} end
-            if imgui.SmallButton("Remove###remove_" .. entry.name) then
-                to_remove = idx
-            end
-            imgui.SameLine()
-            local keep = entry.config.keep == 1
-            ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
-            if ret then
-                entry.config.keep = keep and 1 or 0
-            end
-            self:_draw_hover_tooltip(imgui, "If checked, do not remove this material upon pickup")
-            imgui.SameLine()
-            local hover_tooltip_func = self:_make_material_tooltip_func(entry)
-            if entry.icon and self.config.show_images then
-                self.host:draw_image(imgui, entry.icon, true)
-                self:_draw_hover_tooltip(imgui, hover_tooltip_func, {wrap=0})
-                imgui.SameLine()
-            end
-            imgui.Text(("%s [%s]"):format(entry.locname, entry.name))
-            self:_draw_hover_tooltip(imgui, hover_tooltip_func, {wrap=0})
+    imgui.SeparatorText("Material List")
+    for idx, entry in ipairs(self.env.material_list) do
+        if not entry.config then entry.config = {} end
+        if imgui.SmallButton("Remove###remove_" .. entry.name) then
+            to_remove = idx
         end
-        if to_remove ~= nil then
-            table.remove(self.env.material_list, to_remove)
+        imgui.SameLine()
+        local keep = entry.config.keep == 1
+        ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
+        if ret then
+            entry.config.keep = keep and 1 or 0
         end
-    --    imgui.EndChild()
-    --end
+        self:_draw_hover_tooltip(imgui, "If checked, do not remove this material upon pickup")
+        imgui.SameLine()
+        local hover_tooltip_func = self:_make_material_tooltip_func(entry)
+        if entry.icon and self.config.show_images then
+            self.host:draw_image(imgui, entry.icon, true)
+            self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
+            imgui.SameLine()
+        end
+        imgui.Text(("%s [%s]"):format(entry.locname, entry.name))
+        self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
+    end
+    if to_remove ~= nil then
+        table.remove(self.env.material_list, to_remove)
+    end
 end
 
 function InfoPanel:_draw_entity_dropdown(imgui)
@@ -1136,15 +1174,11 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                     self.host:draw_image(imgui, entry.icon, true, {
                         fallback="data/ui_gfx/icon_unkown.png"
                     })
-                    self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), {
-                        wrap = 0, -- Disable word wrap
-                    })
+                    self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
                     imgui.SameLine()
                 end
                 imgui.Text(animal_build_name(entry.name, entry.path))
-                self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), {
-                    wrap = 0, -- Disable word wrap
-                })
+                self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
             end
         end
     end
@@ -1152,35 +1186,27 @@ end
 
 function InfoPanel:_draw_entity_list(imgui)
     local to_remove = nil
-    --local cflags = imgui.ChildFlags.AutoResizeY
-    --local wflags = imgui.WindowFlags.HorizontalScrollbar
-    --if imgui.BeginChild("Entity List###entity_list", 0, 0, cflags, wflags) then
-        for idx, entry in ipairs(self.env.entity_list) do
-            if not entry.config then entry.config = {} end
-            local bid = ("Remove###remove_%s_%d"):format(entry.id, idx)
-            if imgui.SmallButton(bid) then
-                to_remove = idx
-            end
-            imgui.SameLine()
-            if entry.icon and self.config.show_images then
-                self.host:draw_image(imgui, entry.icon, true, {
-                    fallback="data/ui_gfx/icon_unkown.png"
-                })
-                self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), {
-                    wrap = 0, -- Disable word wrap
-                })
-                imgui.SameLine()
-            end
-            imgui.Text(animal_build_name(entry.name, entry.path))
-            self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), {
-                wrap = 0, -- Disable word wrap
+    imgui.SeparatorText("Entity List")
+    for idx, entry in ipairs(self.env.entity_list) do
+        if not entry.config then entry.config = {} end
+        local bid = ("Remove###remove_%s_%d"):format(entry.id, idx)
+        if imgui.SmallButton(bid) then
+            to_remove = idx
+        end
+        imgui.SameLine()
+        if entry.icon and self.config.show_images then
+            self.host:draw_image(imgui, entry.icon, true, {
+                fallback="data/ui_gfx/icon_unkown.png"
             })
+            self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
+            imgui.SameLine()
         end
-        if to_remove ~= nil then
-            table.remove(self.env.entity_list, to_remove)
-        end
-    --    imgui.EndChild()
-    --end
+        imgui.Text(animal_build_name(entry.name, entry.path))
+        self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
+    end
+    if to_remove ~= nil then
+        table.remove(self.env.entity_list, to_remove)
+    end
 end
 
 function InfoPanel:_draw_item_dropdown(imgui)
@@ -1248,11 +1274,11 @@ function InfoPanel:_draw_item_dropdown(imgui)
                     self.host:draw_image(imgui, entry.icon, true, {
                         fallback="data/ui_gfx/icon_unkown.png"
                     })
-                    self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
+                    self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
                     imgui.SameLine()
                 end
                 imgui.Text(("%s [%s]"):format(locname, entry.id))
-                self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
+                self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
             end
         end
     end
@@ -1261,43 +1287,39 @@ end
 function InfoPanel:_draw_item_list(imgui)
     local ret
     local to_remove = nil
-    --local cflags = imgui.ChildFlags.AutoResizeY
-    --local wflags = imgui.WindowFlags.HorizontalScrollbar
-    --if imgui.BeginChild("Item List###item_list", 0, 0, cflags, wflags) then
-        for idx, entry in ipairs(self.env.item_list) do
-            if not entry.config then entry.config = {} end
-            if imgui.SmallButton("Remove###remove_" .. entry.id) then
-                to_remove = idx
-            end
-            imgui.SameLine()
-            local keep = entry.config.keep == 1
-            ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
-            if ret then
-                entry.config.keep = keep and 1 or 0
-            end
-            self:_draw_hover_tooltip(imgui, "If checked, do not remove this item upon pickup")
-            imgui.SameLine()
-            local hover_func = self:_make_item_tooltip_func(entry)
-            if entry.icon and self.config.show_images then
-                self.host:draw_image(imgui, entry.icon, true, {
-                    fallback="data/ui_gfx/icon_unkown.png"
-                })
-                self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
-                imgui.SameLine()
-            end
-            local label = entry.name
-            if label:match("^%$") then
-                label = GameTextGet(entry.name)
-                if not label or label == "" then label = entry.name end
-            end
-            imgui.Text(("%s [%s]"):format(label, entry.id))
-            self:_draw_hover_tooltip(imgui, hover_func, {wrap=0})
+    imgui.SeparatorText("Item List")
+    for idx, entry in ipairs(self.env.item_list) do
+        if not entry.config then entry.config = {} end
+        if imgui.SmallButton("Remove###remove_" .. entry.id) then
+            to_remove = idx
         end
-        if to_remove ~= nil then
-            table.remove(self.env.item_list, to_remove)
+        imgui.SameLine()
+        local keep = entry.config.keep == 1
+        ret, keep = imgui.Checkbox("###keep_" .. entry.id, keep)
+        if ret then
+            entry.config.keep = keep and 1 or 0
         end
-    --    imgui.EndChild()
-    --end
+        self:_draw_hover_tooltip(imgui, "If checked, do not remove this item upon pickup")
+        imgui.SameLine()
+        local hover_func = self:_make_item_tooltip_func(entry)
+        if entry.icon and self.config.show_images then
+            self.host:draw_image(imgui, entry.icon, true, {
+                fallback="data/ui_gfx/icon_unkown.png"
+            })
+            self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
+            imgui.SameLine()
+        end
+        local label = entry.name
+        if label:match("^%$") then
+            label = GameTextGet(entry.name)
+            if not label or label == "" then label = entry.name end
+        end
+        imgui.Text(("%s [%s]"):format(label, entry.id))
+        self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
+    end
+    if to_remove ~= nil then
+        table.remove(self.env.item_list, to_remove)
+    end
 end
 
 --[[ Determine if we need to remove any list entries and do so ]]
@@ -1821,6 +1843,8 @@ function InfoPanel:init(environ, host, config)
     self.biomes = _get_biome_data()
     self.gui = GuiCreate()
 
+    Orbs:init()
+
     self.debug = {}
     self.do_debug = false
 
@@ -1909,7 +1933,7 @@ function InfoPanel:draw_menu(imgui)
             self.config.show_images = not self.config.show_images
             ModSettingSetNextValue(self.conf.show_images, self.config.show_images, false)
         end
-        imgui.Separator()
+        imgui.SeparatorText("Pickup Actions")
         local items = {
             {"Spells", self.conf.remove_spell},
             {"Items", self.conf.remove_item},
@@ -1923,6 +1947,41 @@ function InfoPanel:draw_menu(imgui)
             if imgui.MenuItem(text) then
                 ModSettingSetNextValue(conf, not curr, false)
             end
+        end
+        imgui.SeparatorText("Orb Radar")
+        local prefix = conf_get(CONF.ORB_ENABLE) and "Disable" or "Enable"
+        if imgui.MenuItem(prefix .. " Orb Radar") then
+            conf_set(CONF.ORB_ENABLE, not conf_get(CONF.ORB_ENABLE))
+        end
+        if imgui.BeginMenu("Orb Selection") then
+            local curr = conf_get(CONF.ORB_LIMIT)
+            local choices = {
+                {"world", "Current World Only"},
+                {"main", "Main World Only"},
+                {"parallel", "Parallel Worlds Only"},
+                {"both", "Both Main and Parallel"},
+            }
+            for _, choice in ipairs(choices) do
+                local conf, label = unpack(choice)
+                prefix = (curr == conf) and "[*] " or ""
+                if imgui.MenuItem(prefix .. label) then
+                    conf_set(CONF.ORB_LIMIT, conf)
+                end
+            end
+            imgui.EndMenu()
+        end
+        if imgui.BeginMenu("Orb Display") then
+            if imgui.MenuItem("Nearest") then
+                conf_set(CONF.ORB_DISPLAY, 1)
+            end
+            if imgui.MenuItem("Nearest 3") then
+                conf_set(CONF.ORB_DISPLAY, 3)
+            end
+            if imgui.MenuItem("All") then
+                conf_set(CONF.ORB_DISPLAY, 33)
+            end
+            imgui.TextDisabled("Precise control in mod settings")
+            imgui.EndMenu()
         end
         imgui.Separator()
         if imgui.MenuItem("Toggle Internal Debugging") then
@@ -2314,6 +2373,7 @@ function InfoPanel:draw(imgui)
     end
 
     self:_draw_onscreen_gui()
+    self:_draw_orb_radar()
 end
 
 --[[ Public: called when the panel window is closed ]]
@@ -2321,6 +2381,7 @@ function InfoPanel:draw_closed(imgui)
     if self.env.find_spells then
         self:_find_spells()
     end
+    self:_draw_orb_radar()
     self:_draw_onscreen_gui()
 
     self:_process_remove_entries()

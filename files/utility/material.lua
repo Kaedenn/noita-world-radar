@@ -5,12 +5,34 @@
 nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
 _material_cache = nil
 
-local function _parse_cell_data(entry) -- TODO
-
+local function _parse_cell_data(entry)
+    local result = {}
+    for key, val in pairs(entry.attr) do
+        result[key] = val
+    end
+    -- TODO: children
+    return result
 end
 
-local function _parse_cell_data_child(entry) -- TODO
+local function _parse_cell_data_child(entry)
+    local result = {}
+    for key, val in pairs(entry.attr) do
+        if key == "_parent" then
+            result.parent = val
+        elseif key == "_inherit_reactions" then
+            result.inherit_reactions = val
+        else
+            result[key] = val
+        end
+    end
 
+    if #entry.children > 0 then
+        for _, child in ipairs(entry.children) do
+            result[child.name] = child -- TODO: parse
+        end
+    end
+
+    return result
 end
 
 local function _parse_reaction(entry)
@@ -41,8 +63,46 @@ local function _parse_reaction(entry)
     return mat_from, mat_to, probability
 end
 
-local function _parse_req_reaction(entry) -- TODO
+--[[ Requirement reaction: input1 becomes output1+ unless input2+ are present ]]
+local function _parse_req_reaction(entry)
+    local input = entry.attr.input_cell1
+    local input_req = entry.attr.input_cell2
+    local outputs = {entry.attr.output_cell1, entry.attr.output_cell2}
+    local probability = tonumber(entry.attr.probability)
+    return {
+        input = input,
+        input_req = input_req,
+        outputs = outputs,
+        probability = probability,
+    }
+end
 
+--[[ Merge a CellDataChild's parent into the CellDataChild entry ]]
+local function merge_celldata(entry, parent)
+    local merged = {}
+    for key, val in pairs(parent) do
+        merged[key] = val
+    end
+    for key, val in pairs(entry) do
+        if key == "tags" then
+            local tags = parent.tags .. "," .. val
+            local seen = {}
+            local final = {}
+            for tag in tags:gmatch("%[[^%]]+%]") do
+                if not seen[tag] then
+                    table.insert(final, tag)
+                    seen[tag] = tag
+                end
+            end
+            merged.tags = table.concat(final, ",")
+        else
+            merged[key] = val
+        end
+    end
+
+    for key, val in pairs(merged) do
+        entry[key] = val
+    end
 end
 
 --[[ Parse materials.xml ]]
@@ -58,9 +118,9 @@ function load_materials_xml()
     for idx, entry in ipairs(mats.children) do
         local tag = entry.name
         if tag == "CellData" then
-            -- TODO
+            table.insert(cells, _parse_cell_data(entry))
         elseif tag == "CellDataChild" then
-            -- TODO
+            table.insert(cell_children, _parse_cell_data_child(entry))
         elseif tag == "Reaction" then
             local m_from, m_to, prob = _parse_reaction(entry)
             table.insert(reactions, {
@@ -69,14 +129,48 @@ function load_materials_xml()
                 probability = prob,
             })
         elseif tag == "ReqReaction" then
-            -- TODO: input1 becomes output1 unless input2+ are present
+            table.insert(req_reactions, _parse_req_reaction(entry))
         else
             print_error(("Invalid materials.xml tag %d: %s"):format(idx, entry))
         end
     end
+
+    local cells_byname = {}
+    for _, entry in ipairs(cells) do
+        cells_byname[entry.name] = entry
+    end
+
+    -- CellDataChild entries we couldn't parse, likely due to depending on
+    -- entries defined below it.
+    local defer_cells = {}
+    local last_children_count = 0
+
+    -- Merge parent/child material definitions
+    while #cell_children > 0 and #cell_children ~= last_children_count do
+        for _, entry in ipairs(cell_children) do
+            local parent = cells_byname[entry.parent]
+            if not parent then
+                table.insert(defer_cells, entry)
+            else
+                merge_celldata(entry, parent)
+                cells_byname[entry.name] = entry
+                table.insert(cells, entry)
+            end
+        end
+        cell_children = defer_cells
+        last_children_count = #cell_children
+        defer_cells = {}
+    end
+
+    if #defer_cells > 0 then
+        for _, entry in ipairs(defer_cells) do
+            print_error(("Cell %s has invalid parent %s"):format(
+                entry.name, entry.parent))
+        end
+    end
+
     return {
         materials = cells,
-        child_materials = cell_children,
         reactions = reactions,
         req_reactions = req_reactions,
     }

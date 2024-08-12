@@ -1618,8 +1618,7 @@ function InfoPanel:_format_chest_reward(reward)
                 image=iinfo.icon,
                 fallback="data/ui_gfx/icon_unkown.png",
                 GameTextGet(iinfo.name or "$item_potion"),
-            },
-            {
+            }, {
                 image=minfo.icon,
                 fallback="data/ui_gfx/icon_unkown.png",
                 color="lightcyan",
@@ -1980,7 +1979,7 @@ function InfoPanel:draw_menu(imgui)
             if imgui.MenuItem("All") then
                 conf_set(CONF.ORB_DISPLAY, 33)
             end
-            imgui.TextDisabled("Precise control in mod settings")
+            imgui.TextDisabled("NOTE: Precise control in mod settings")
             imgui.EndMenu()
         end
         imgui.Separator()
@@ -2287,12 +2286,12 @@ function InfoPanel:draw(imgui)
             -- Print for things other than chests, as chests get special treatment
             if not entity_is_chest(entities[1]) then
                 self.host:p({
-                    ("%dx"):format(#entities),
-                    {
+                    ("%dx"):format(#entities), {
                         name,
                         image=iinfo.icon,
                         fallback="data/ui_gfx/icon_unkown.png",
                         color="lightcyan",
+                        hover=self:_make_item_tooltip_func(iinfo),
                     },
                 })
             end
@@ -2305,6 +2304,7 @@ function InfoPanel:draw(imgui)
                     image=iinfo.icon,
                     fallback="data/ui_gfx/icon_unkown.png",
                     color="white",
+                    hover=self:_make_item_tooltip_func(iinfo),
                 })
                 table.insert(line, {name, color="lightcyan"})
                 if self.host.debugging then
@@ -2362,8 +2362,7 @@ function InfoPanel:draw(imgui)
                 entinfo = self:_get_entity_by_name(name)
             end
             self.host:p({
-                ("%dx"):format(#entities),
-                {
+                ("%dx"):format(#entities), {
                     image = entinfo.icon,
                     fallback = "data/ui_gfx/icon_unkown.png",
                     name,

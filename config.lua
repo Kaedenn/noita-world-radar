@@ -1,5 +1,3 @@
-dofile_once("data/scripts/lib/utilities.lua")
-dofile_once("data/scripts/lib/mod_settings.lua")
 
 MOD_ID = "world_radar"
 

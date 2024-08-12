@@ -43,6 +43,7 @@ optional:
   color: {r, g, b}    values between [0, 1], alpha = 1; or:
   color: {r, g, b, a} values between [0, 1]
   image: string       path to a PNG image file
+  image: table        image specification
   width: number       override width of the image in pixels
   height: number      override height of the image in pixels
   wrapped_text: string    display text wrapped to the container
@@ -55,6 +56,8 @@ optional:
     .func: function   function called if the button is clicked
     .small: boolean   if true, creates a small button
     [i]: any          applied to the function as arguments
+  hover: table        print a hover box if the item is hovered (requires image)
+  hover: function     call a function if the item is hovered (requires image)
 
 The indexed values (fragment[1], fragment[2], etc) can be zero or more of the
 following:
@@ -455,6 +458,7 @@ function Panel:draw_image(imgui, image, rescale, extra)
     local width, height, uvx, uvy = 0, 0, 0, 0
     local frame_width, frame_height = nil, nil
     local odata = extra or {}
+    local hover_obj = extra.hover
     if type(image) == "table" then
         path = image.path
         width = image.width or 0
@@ -499,6 +503,18 @@ function Panel:draw_image(imgui, image, rescale, extra)
         imgui.Image(img, width, height, 0, 0, uvx, uvy)
     else
         imgui.Image(img, width, height)
+    end
+    if hover_obj then
+        if imgui.IsItemHovered() then
+            if imgui.BeginTooltip() then
+                if type(hover_obj) == "function" then
+                    hover_obj(imgui, self, image)
+                else
+                    self:draw_line(imgui, hover_obj, nil, nil)
+                end
+                imgui.EndTooltip()
+            end
+        end
     end
     return true
 end

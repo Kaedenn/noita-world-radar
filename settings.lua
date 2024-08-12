@@ -21,6 +21,7 @@ mod_settings = {
     {
         category_id = "general_settings",
         ui_name = "General Settings",
+        foldable = true,
         settings = {
             {
                 id = "enable",
@@ -86,6 +87,7 @@ mod_settings = {
     {
         category_id = "display_settings",
         ui_name = "Display Settings",
+        foldable = true,
         settings = {
             {
                 id = "show_images",
@@ -139,6 +141,7 @@ mod_settings = {
     {
         category_id = "orb_settings",
         ui_name = "Orb Radar Settings",
+        foldable = true,
         settings = {
             {
                 id = "orb_enable",

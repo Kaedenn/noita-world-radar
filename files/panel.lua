@@ -458,7 +458,7 @@ function Panel:draw_image(imgui, image, rescale, extra)
     local width, height, uvx, uvy = 0, 0, 0, 0
     local frame_width, frame_height = nil, nil
     local odata = extra or {}
-    local hover_obj = extra.hover
+    local hover_obj = odata.hover
     if type(image) == "table" then
         path = image.path
         width = image.width or 0

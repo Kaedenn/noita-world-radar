@@ -1,5 +1,29 @@
 --[[ Assorted utility functions that don't belong anywhere else ]]
 
+--[[ Collect {id, name} pairs into {name, {id...}} sets ]]
+function aggregate(entries)
+    local byname = {}
+    for _, entry in ipairs(entries) do
+        local entity = entry[1] or entry.entity
+        local name = entry[2] or entry.name
+        if name ~= nil then
+            if not byname[name] then
+                byname[name] = {}
+            end
+            table.insert(byname[name], entity)
+        end
+    end
+    local results = {}
+    for name, entities in pairs(byname) do
+        table.insert(results, {name, entities})
+    end
+    table.sort(results, function(left, right)
+        local lname, rname = left[1], right[1]
+        return lname < rname
+    end)
+    return results
+end
+
 --[[ Empty a table in-place ]]
 function table_clear(tbl)
     for key, val in pairs(tbl) do

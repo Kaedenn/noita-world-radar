@@ -7,6 +7,8 @@ IDEA: Add "include all unkilled enemies" button
 
 IDEA: Limit menu choices to discovered things
 
+TODO: Add I18N from shift_query to replace GameTextGet
+
 TODO: Add treasure chest drop scanning (wands, spells, containers)
 
 TODO: Better feedback display for timed messages to show remaining time
@@ -44,9 +46,14 @@ dofile_once("mods/world_radar/files/utility/orbs.lua")
 dofile_once("mods/world_radar/files/radar.lua")
 -- luacheck: globals Radar RADAR_KIND_SPELL RADAR_KIND_ENTITY RADAR_KIND_MATERIAL RADAR_KIND_ITEM RADAR_ORB
 dofile_once("mods/world_radar/files/lib/utility.lua")
--- luacheck: globals table_clear table_empty table_has_entry split_string
+-- luacheck: globals aggregate table_clear table_empty table_has_entry split_string
 
 NOWRAP = {wrap=0}
+
+AC_KEEP = 0
+AC_IGNORE = 1
+AC_REQUIRE = 2
+ACMAX = AC_REQUIRE + 1
 
 --[[ Panel class with default values.
 --
@@ -162,30 +169,6 @@ InfoPanel = {
     },
 }
 
---[[ Collect {id, name} pairs into {name, {id...}} sets ]]
-local function aggregate(entries)
-    local byname = {}
-    for _, entry in ipairs(entries) do
-        local entity = entry[1] or entry.entity
-        local name = entry[2] or entry.name
-        if name ~= nil then
-            if not byname[name] then
-                byname[name] = {}
-            end
-            table.insert(byname[name], entity)
-        end
-    end
-    local results = {}
-    for name, entities in pairs(byname) do
-        table.insert(results, {name, entities})
-    end
-    table.sort(results, function(left, right)
-        local lname, rname = left[1], right[1]
-        return lname < rname
-    end)
-    return results
-end
-
 --[[ Determine if the player has the spell in their inventory ]]
 local function player_has_spell(spell_id)
     local inv_cards = get_with_tags({"card_action"}, {player=true})
@@ -195,6 +178,20 @@ local function player_has_spell(spell_id)
         if spell == spell_id then
             return true
         end
+    end
+    return false
+end
+
+--[[ True if the AC status matches the AC flag ]]
+function _want_ac_spell(ac_status, ac_flag)
+    if ac_status == AC_KEEP then
+        return true
+    end
+    if ac_status == AC_IGNORE and not ac_flag then
+        return true
+    end
+    if ac_status == AC_REQUIRE and ac_flag then
+        return true
     end
     return false
 end
@@ -415,13 +412,12 @@ function InfoPanel:_find_spells()
             local spinfo = spell_table[spell]
             if not spinfo then goto continue end
             local spconfig = spinfo.config or {}
-            if spconfig.ignore_ac == 1 and spell_is_always_cast(spell_id) then
-                goto continue
+            if _want_ac_spell(spconfig.ignore_ac, spell_is_always_cast(spell_id)) then
+                if not self.env.wand_matches[entid] then
+                    self.env.wand_matches[entid] = {}
+                end
+                self.env.wand_matches[entid][spell] = true
             end
-            if not self.env.wand_matches[entid] then
-                self.env.wand_matches[entid] = {}
-            end
-            self.env.wand_matches[entid][spell] = true
             ::continue::
         end
     end
@@ -435,7 +431,7 @@ function InfoPanel:_find_spells()
         if not self.env.wand_matches[parent] then
             if spell and spell_table[spell] then
                 local spconfig = spell_table[spell].config or {}
-                if spconfig.ignore_ac ~= 1 or not spell_is_always_cast(entid) then
+                if _want_ac_spell(spconfig.ignore_ac, spell_is_always_cast(entid)) then
                     self.env.card_matches[entid] = true
                 end
             end
@@ -652,7 +648,7 @@ function InfoPanel:_update_table(data, name)
                 modified = true
             end
             if not tbl_entry.config.ignore_ac then
-                tbl_entry.config.ignore_ac = 0
+                tbl_entry.config.ignore_ac = AC_KEEP
                 modified = true
             end
         elseif name == "materials" then
@@ -909,7 +905,7 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                 icon = spell_entry.sprite,
                 config = {
                     keep = 0,
-                    ignore_ac = 0,
+                    ignore_ac = AC_KEEP,
                 },
             }
             local add_me = false
@@ -970,12 +966,22 @@ function InfoPanel:_draw_spell_list(imgui)
         end
         self:_draw_hover_tooltip(imgui, "If checked, do not remove this spell upon pickup")
         imgui.SameLine()
-        local ignore_ac = entry.config.ignore_ac == 1
-        ret, ignore_ac = imgui.Checkbox("###ignore_ac_" .. entry.id, ignore_ac)
-        if ret then
-            entry.config.ignore_ac = ignore_ac and 1 or 0
+
+        local iac_label = ({
+            [AC_KEEP] = "[-]",
+            [AC_IGNORE] = "[I]",
+            [AC_REQUIRE] = "[R]",
+        })[entry.config.ignore_ac or AC_KEEP]
+
+        if imgui.SmallButton(iac_label .. "###ignore_ac_" .. entry.id) then
+            entry.config.ignore_ac = (entry.config.ignore_ac + 1) % ACMAX
         end
-        self:_draw_hover_tooltip(imgui, "If checked, do not match if the spell is an Always Cast spell")
+        self:_draw_hover_tooltip(imgui, {
+            {"Determines the behavior if the found spell happens to be an Always Cast"},
+            {"[-] will match spells regardless of Always Cast", clear_line=true},
+            {"[I] will ignore spells if they're Always Cast", clear_line=true},
+            {"[R] will ignore spells to they're not Always Cast", clear_line=true},
+        }, NOWRAP)
         imgui.SameLine()
         local hover_func = self:_make_spell_tooltip_func(entry)
         if entry.icon and self.config.show_images then
@@ -2360,6 +2366,9 @@ function InfoPanel:draw(imgui)
             end
             if not entinfo.id then
                 entinfo = self:_get_entity_by_name(name)
+            end
+            if not entinfo.id then
+                entinfo = self:_get_entity_by_name(EntityGetFilename(first_entity))
             end
             self.host:p({
                 ("%dx"):format(#entities), {

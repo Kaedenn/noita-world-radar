@@ -30,8 +30,6 @@
 -- from the base entirely.
 --]]
 
--- FIXME: SpriteComponent lookup broken for icons
-
 local self_name = arg[0]:gsub(".*\\/", "")
 local base_path = arg[0]:gsub("[\\/][^\\/]+.lua$", "")
 package.path = package.path .. ";" .. table.concat({
@@ -42,7 +40,7 @@ package.path = package.path .. ";" .. table.concat({
 
 io = require 'io'
 
--- luacheck: globals minifs read_file read_lines find_with_extension
+-- luacheck: globals minifs read_file read_lines find_with_extension basename path_change_prefix
 require 'lib.filesystem' -- exports minifs
 kae = require 'lib.libkae'
 logger = require 'lib.logging'
@@ -57,6 +55,8 @@ function parse_argv(argv)
         trace_files = {},
         data_path = nil,
         output = "entities.lua",
+
+        file_list = {},
     }
     local skip_next = false
     for opti, optv in ipairs(argv) do
@@ -72,6 +72,9 @@ function parse_argv(argv)
             args.data_path = optv
         elseif optv == "-o" or optv == "--output" then
             args.output = argv[opti+1]
+            skip_next = true
+        elseif optv == "-I" or optv == "--input" then
+            table.insert(args.file_list, argv[opti+1])
             skip_next = true
         elseif optv == "-v" or optv == "--verbose" then
             args.verbose = true
@@ -102,6 +105,10 @@ options:
 
     if not args.data_path then
         error("Missing required argument data_path")
+    end
+
+    if not args.data_path:match("/$") then
+        args.data_path = args.data_path .. "/"
     end
 
     if args.trace then
@@ -260,10 +267,11 @@ local function expand_base_tags(xml, data_path, depth)
     if not base_tag then return end
     if not depth then depth = 1 end
 
-    local parent_path = base_tag.attr.file:gsub("^data%/", data_path .. "/")
-    parent_path = parent_path:gsub("[%/]+", "/")
+    local parent_path = path_change_prefix(base_tag.attr.file, "data", data_path)
     logger.trace("%d: Expanding %s to %s", depth, base_tag.attr.file, parent_path)
     local root_xml = nxml.parse(read_file(parent_path))
+    expand_base_tags(root_xml, data_path, depth+1)
+
     logger.trace("%d: Merging %s %s", depth, parent_path, root_xml)
     logger.trace("%d: Into %s", depth, xml)
     merge_xml(xml, base_tag, root_xml)
@@ -323,29 +331,29 @@ local function build_entity_entry(xml, filename)
     local genome = xml_lookup(xml, "GenomeDataComponent")
     local function nonempty(value) return value and value ~= "" end
 
-    local id = filename:gsub("^.*%/", ""):gsub("%.xml$", "")
+    local id = basename(filename, "xml")
     local name = id
 
     if nonempty(xml.attr.name) then
         name = xml.attr.name
     end
 
-    local icon = nil
-    if sprite and nonempty(sprite.attr.image_file) then
-        icon = sprite.attr.image_file
-    end
-
     local health = nil
-    if damage and nonempty(damage.attr.hp) then
-        health = damage.attr.hp
-    end
-
+    local icon = nil
     local herd = nil
-    if genome and nonempty(genome.attr.herd_id) then
-        herd = genome.attr.herd_id
+    for _, elem in ipairs(xml.children) do
+        if elem.name == "DamageModelComponent" then
+            health = elem.attr.hp
+        elseif elem.name == "SpriteComponent" then
+            if elem.attr.image_file and not elem.attr._tags then
+                icon = elem.attr.image_file
+            end
+        elseif elem.name == "GenomeDataComponent" then
+            herd = elem.attr.herd_id
+        end
     end
 
-    local entry = {
+    return {
         id = id,
         name = name,
         path = filename,
@@ -355,8 +363,6 @@ local function build_entity_entry(xml, filename)
             herd = herd,
         },
     }
-    logger.debug(table_to_string(entry))
-    return entry
 end
 
 function main()
@@ -377,19 +383,25 @@ function main()
         end
     end
 
+    local file_list = argv.file_list
+    local data_path = ""
+    if #argv.file_list == 0 then
+        file_list = find_with_extension(data, "xml")
+        data_path = argv.data_path
+    end
+
     local entlist = {}
-    for _, name in ipairs(find_with_extension(data, "xml")) do
-        local filename = name:match("[/\\](data[/\\].*)")
-        local basename = name:match("[^/\\]+$")
-        logger.info("Reading XML file " .. name)
+    for _, name in ipairs(file_list) do
+        local filename = path_change_prefix(name, data_path, "data")
+        logger.info("Reading XML file %s as %s", name, filename)
         local root = nxml.parse(read_file(name))
         if root.name ~= "Entity" then goto continue end
 
         local save_level = logger.level
-        if trace_files[basename] then
+        if trace_files[basename(name)] then
             logger.level = logger.TRACE
         end
-        expand_base_tags(root, argv.data_path, 1)
+        expand_base_tags(root, data_path, 1)
         logger.level = save_level
 
         local ename = root.attr.name

@@ -37,6 +37,39 @@ function read_lines(path)
     return lines
 end
 
+--[[ Rebase a path relative to a different directory ]]
+function path_change_prefix(filepath, old_prefix, new_prefix)
+    local parts = minifs.splitpath(filepath)
+    local old_parts = minifs.splitpath(old_prefix)
+
+    while #old_parts > 0 and old_parts[1] == parts[1] do
+        table.remove(old_parts, 1)
+        table.remove(parts, 1)
+    end
+    if new_prefix:match("/$") then
+        new_prefix = new_prefix:gsub("[/]+$", "")
+    end
+    table.insert(parts, 1, new_prefix)
+    return table.concat(parts, minifs.PATH_SEPARATOR)
+end
+
+--[[ Obtain the leading components of a path ]]
+function dirname(path)
+    local parts = minifs.splitpath(path)
+    parts[#parts] = nil
+    return table.concat(parts, minifs.PATH_SEPARATOR)
+end
+
+--[[ Obtain the trailing component of a path ]]
+function basename(path, ext)
+    local parts = minifs.splitpath(path)
+    local base = parts[#parts]
+    if ext ~= nil and base:match("%.([^./]+)") == ext then
+        base = base:gsub("%.([^./]+)", "")
+    end
+    return base
+end
+
 --[[ Join two or more path components together ]]
 function join_path(stem, ...)
     local result = table.concat({stem, ...}, minifs.PATH_SEPARATOR)

@@ -40,7 +40,7 @@ package.path = package.path .. ";" .. table.concat({
 
 io = require 'io'
 
--- luacheck: globals minifs read_file read_lines find_with_extension
+-- luacheck: globals minifs read_file read_lines find_with_extension path_change_prefix
 require 'lib.filesystem' -- exports minifs
 kae = require 'lib.libkae'
 logger = require 'lib.logging'
@@ -52,8 +52,11 @@ function parse_argv(argv)
     local args = {
         verbose = false,
         trace = false,
+        trace_files = {},
         data_path = nil,
         output = "items.lua",
+
+        file_list = {},
     }
     local skip_next = false
     for opti, optv in ipairs(argv) do
@@ -70,10 +73,16 @@ function parse_argv(argv)
         elseif optv == "-o" or optv == "--output" then
             args.output = argv[opti+1]
             skip_next = true
+        elseif optv == "-I" or optv == "--input" then
+            table.insert(args.file_list, argv[opti+1])
+            skip_next = true
         elseif optv == "-v" or optv == "--verbose" then
             args.verbose = true
         elseif optv == "-t" or optv == "--trace" then
             args.trace = true
+        elseif optv == "-T" or optv == "--trace-this" then
+            table.insert(args.trace_files, argv[opti+1])
+            skip_next = true
         elseif optv == "-h" or optv == "--help" then
             print(([[
 usage: %s [-h] [-v] [-o FILE] DATA_PATH
@@ -98,6 +107,10 @@ options:
         error("Missing required argument data_path")
     end
 
+    if not args.data_path:match("/$") then
+        args.data_path = args.data_path .. "/"
+    end
+
     if args.trace then
         logger.level = logger.TRACE
     elseif args.verbose then
@@ -107,6 +120,24 @@ options:
     end
 
     return args
+end
+
+--[[ Trivial function to convert a table to a string ]]
+local function table_to_string(tbl)
+    local entries = {}
+    for key, val in pairs(tbl) do
+        if type(val) == "table" then
+            table.insert(entries, ("%s=%s"):format(key, table_to_string(val)))
+        elseif type(val) == "number" then
+            table.insert(entries, ("%s=%s"):format(key, val))
+        elseif type(val) == "boolean" then
+            table.insert(entries, ("%s=%s"):format(key, val and "true" or "false"))
+        else
+            table.insert(entries, ("%s=%q"):format(key, val))
+        end
+    end
+    table.sort(entries)
+    return "{" .. table.concat(entries, ", ") .. "}"
 end
 
 --[[ Get all of the item icons ]]
@@ -264,10 +295,11 @@ local function expand_base_tags(xml, data_path, depth)
     if not base_tag then return end
     if not depth then depth = 1 end
 
-    local parent_path = base_tag.attr.file:gsub("^data%/", data_path .. "/")
-    parent_path = parent_path:gsub("[%/]+", "/")
+    local parent_path = path_change_prefix(base_tag.attr.file, "data", data_path)
     logger.trace("%d: Expanding %s to %s", depth, base_tag.attr.file, parent_path)
     local root_xml = nxml.parse(read_file(parent_path))
+    expand_base_tags(root_xml, data_path, depth+1)
+
     logger.trace("%d: Merging %s %s", depth, parent_path, root_xml)
     logger.trace("%d: Into %s", depth, xml)
     merge_xml(xml, base_tag, root_xml)
@@ -380,24 +412,6 @@ function classify_item(entry)
     return 100
 end
 
---[[ Trivial function to convert a table to a string ]]
-local function table_to_string(tbl)
-    local entries = {}
-    for key, val in pairs(tbl) do
-        if type(val) == "table" then
-            table.insert(entries, ("%s=%s"):format(key, table_to_string(val)))
-        elseif type(val) == "number" then
-            table.insert(entries, ("%s=%s"):format(key, val))
-        elseif type(val) == "boolean" then
-            table.insert(entries, ("%s=%s"):format(key, val and "true" or "false"))
-        else
-            table.insert(entries, ("%s=%q"):format(key, val))
-        end
-    end
-    table.sort(entries)
-    return "{" .. table.concat(entries, ", ") .. "}"
-end
-
 function main()
     local argv = parse_argv(arg)
 
@@ -422,8 +436,7 @@ function main()
 
         local filename = name
         if filename:find(argv.data_path) then
-            filename = "data/" .. filename:sub(#argv.data_path)
-            filename = filename:gsub("[/]+", "/")
+            filename = path_change_prefix(filename, argv.data_path, "data")
         end
         local item_entry = build_item_entry(root, filename)
         if item_entry.icon == "" then
@@ -433,7 +446,7 @@ function main()
         end
         if item_entry.icon:match("%.xml$") then
             logger.debug("Entry %s has xml sprite %s", item_entry.id, item_entry.icon)
-            local icon_path = item_entry.icon:gsub("^data%/", argv.data_path)
+            local icon_path = path_change_prefix(item_entry.icon, "data", argv.data_path)
             item_entry.icon = parse_icon_xml(icon_path)
         end
         table.insert(itemlist, item_entry)
@@ -461,8 +474,8 @@ function main()
 return {
 ]]):format(self_name))
     for _, entry in ipairs(itemlist) do
-        ofile:write(([[  %s,
-]]):format(table_to_string(entry)))
+        ofile:write("  " .. table_to_string(entry) .. ",")
+        ofile:write("\n")
     end
     ofile:write([[
 }

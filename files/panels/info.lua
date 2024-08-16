@@ -7,6 +7,10 @@ IDEA: Add "include all unkilled enemies" button
 
 IDEA: Limit menu choices to discovered things
 
+TODO: Allow for searching for enemies by tag
+
+TODO: Dynamically limit popup width to screen width
+
 TODO: Add I18N from shift_query to replace GameTextGet
 
 TODO: Add treasure chest drop scanning (wands, spells, containers)
@@ -212,6 +216,7 @@ function _get_biome_data()
         local show = true
         if biome_is_default(biome_name, modifier) then show = false end
         if biome_is_common(biome_name, modifier) then show = false end
+        if biome_name == "rainforest_open" then show = false end
         if show then
             biomes[biome_name] = {
                 name = biome_name,
@@ -661,7 +666,15 @@ function InfoPanel:_update_table(data, name)
                 modified = true
             end
         elseif name == "entities" then
-            -- Nothing to do yet
+            local entinfo = self:_get_entity_by_name(tbl_entry.path)
+            if not tbl_entry.tags then
+                tbl_entry.tags = entinfo.tags
+                modified = true
+            end
+            if not tbl_entry.data then
+                tbl_entry.data = entinfo.data or {}
+                modified = true
+            end
         elseif name == "items" then
             if not tbl_entry.config.keep then
                 tbl_entry.config.keep = 0
@@ -790,6 +803,7 @@ end
 --[[ Create a function that draws the hover tooltip for a spell ]]
 function InfoPanel:_make_spell_tooltip_func(entry)
     return function(imgui, self_)
+        if not entry then return end
         local data = spell_get_data(entry.id)
         imgui.Text(entry.id)
         imgui.Text(("Type: %s [%d]"):format(action_lookup(data.type), data.type))
@@ -825,6 +839,7 @@ end
 --[[ Create a function that draws the hover tooltip for a material ]]
 function InfoPanel:_make_material_tooltip_func(entry)
     return function(imgui, self_)
+        if not entry then return end
         local kind = entry.kind
         local matid = entry.id
         local matname = entry.name
@@ -835,9 +850,39 @@ function InfoPanel:_make_material_tooltip_func(entry)
     end
 end
 
+--[[ Create a function that draws the hover tooltip for an enemy ]]
+function InfoPanel:_make_enemy_tooltip_func(entry)
+    return function(imgui, self_)
+        if not entry then return end
+        imgui.Text(("%s (ID: %s)"):format(entry.name, entry.id))
+        imgui.Text(("Tags: %s"):format(entry.tags))
+        imgui.Text(("Path: %s"):format(entry.path))
+        if entry.data then
+            if entry.data.herd then
+                imgui.Text(("Herd: %s"):format(entry.data.herd))
+            end
+            if entry.data.health then
+                local health = tonumber(entry.data.health)
+                local mult = MagicNumbersGetValue("GUI_HP_MULTIPLIER")
+                imgui.Text(("Health: %d"):format(math.floor(health * mult)))
+            end
+            if entry.data.effects then
+                for _, effect in ipairs(entry.data.effects) do
+                    local line = ("Has effect %s"):format(effect.name)
+                    if effect.frames ~= -1 then
+                        line = line .. (" for %d frames"):format(effect.frames)
+                    end
+                    imgui.Text(line)
+                end
+            end
+        end
+    end
+end
+
 --[[ Create a function that draws the hover tooltip for an item ]]
 function InfoPanel:_make_item_tooltip_func(entry)
     return function(imgui, self_)
+        if not entry then return end
         imgui.Text(("%s (ID: %s)"):format(entry.name, entry.id))
         imgui.Text(("Tags: %s"):format(entry.tags))
         imgui.Text(("Path: %s"):format(entry.path))
@@ -1172,19 +1217,22 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                         name = entry.name,
                         path = entry.path,
                         icon = entry.icon,
+                        tags = entry.tags,
+                        data = entry.data or {},
                         config = {},
                     })
                 end
                 imgui.SameLine()
+                local hover_fn = self:_make_enemy_tooltip_func(entry)
                 if self.config.show_images then
                     self.host:draw_image(imgui, entry.icon, true, {
                         fallback="data/ui_gfx/icon_unkown.png"
                     })
-                    self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
+                    self:_draw_hover_tooltip(imgui, hover_fn, {wrap=800})
                     imgui.SameLine()
                 end
                 imgui.Text(animal_build_name(entry.name, entry.path))
-                self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
+                self:_draw_hover_tooltip(imgui, hover_fn, {wrap=800})
             end
         end
     end
@@ -1200,15 +1248,16 @@ function InfoPanel:_draw_entity_list(imgui)
             to_remove = idx
         end
         imgui.SameLine()
+        local hover_fn = self:_make_enemy_tooltip_func(entry)
         if entry.icon and self.config.show_images then
             self.host:draw_image(imgui, entry.icon, true, {
                 fallback="data/ui_gfx/icon_unkown.png"
             })
-            self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
+            self:_draw_hover_tooltip(imgui, hover_fn, {wrap=800})
             imgui.SameLine()
         end
         imgui.Text(animal_build_name(entry.name, entry.path))
-        self:_draw_hover_tooltip(imgui, ("Path: %s"):format(entry.path), NOWRAP)
+        self:_draw_hover_tooltip(imgui, hover_fn, {wrap=800})
     end
     if to_remove ~= nil then
         table.remove(self.env.entity_list, to_remove)
@@ -2373,6 +2422,7 @@ function InfoPanel:draw(imgui)
             self.host:p({
                 ("%dx"):format(#entities), {
                     image = entinfo.icon,
+                    hover = self:_make_enemy_tooltip_func(entinfo),
                     fallback = "data/ui_gfx/icon_unkown.png",
                     name,
                 }

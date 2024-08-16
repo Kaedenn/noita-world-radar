@@ -126,7 +126,9 @@ end
 local function table_to_string(tbl)
     local entries = {}
     for key, val in pairs(tbl) do
-        if type(val) == "table" then
+        if type(key) == "number" then
+            table.insert(entries, table_to_string(val))
+        elseif type(val) == "table" then
             table.insert(entries, ("%s=%s"):format(key, table_to_string(val)))
         elseif type(val) == "number" then
             table.insert(entries, ("%s=%s"):format(key, val))
@@ -324,6 +326,27 @@ local function parse_icon_xml(file_path)
     return ""
 end
 
+--[[ Obtain the table of effects the entity could have ]]
+local function entity_get_effects(xml)
+    local effects = {}
+    for _, elem in ipairs(xml.children) do
+        if elem.name == "GameEffectComponent" then
+            local effect = elem.attr.effect
+            local frames = tonumber(elem.attr.frames or "0")
+            effects[effect] = frames
+        elseif elem.name == "Entity" then
+            for _, entry in ipairs(entity_get_effects(elem)) do
+                effects[entry.name] = entry.frames
+            end
+        end
+    end
+    local list = {}
+    for name, frames in pairs(effects) do
+        table.insert(list, {name=name, frames=frames})
+    end
+    return list
+end
+
 --[[ Build an entity table from the given xml ]]
 local function build_entity_entry(xml, filename)
     local damage = xml_lookup(xml, "DamageModelComponent")
@@ -354,6 +377,8 @@ local function build_entity_entry(xml, filename)
         end
     end
 
+    local effects = entity_get_effects(xml)
+
     return {
         id = id,
         name = name,
@@ -363,6 +388,7 @@ local function build_entity_entry(xml, filename)
         data = {
             health = health,
             herd = herd,
+            effects = effects,
         },
     }
 end

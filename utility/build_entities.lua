@@ -338,6 +338,7 @@ local function build_entity_entry(xml, filename)
         name = xml.attr.name
     end
 
+    local tags = xml.attr.tags
     local health = nil
     local icon = nil
     local herd = nil
@@ -358,6 +359,7 @@ local function build_entity_entry(xml, filename)
         name = name,
         path = filename,
         icon = icon,
+        tags = tags,
         data = {
             health = health,
             herd = herd,

@@ -15,6 +15,8 @@ usage: $0 [-h] [-v|-V] [-n] [-b DIR] [-C] [-F] [-N DIR] [-a ARG] [ACTION]
 
 actions:
     diff    compare local and deployed versions of this mod (default)
+    diffw   compare local and workshop versions of this mod
+    diffd   compare deployed and workshop versions of this mod
     cp      copy this mod to the Noita mods directory
 
 options:
@@ -125,6 +127,9 @@ compare_mods() { # local remote
   diff_args+=(-x "ref")              # remove reference items
   diff_args+=(-x "build")            # remove compilation/bundling stuff
   diff_args+=(-x "workshop")         # remove workshop symlink
+  diff_args+=(-x .git -x .gitignore) # remove git directories
+  diff_args+=(-x README.md)          # remove readme
+  diff_args+=(-x workshop_id.txt -x workshop.xml -x workshop_preview_image.png)
   if [[ -z "${DEBUG:-}" ]]; then
     diff_args+=("-q")
   fi
@@ -189,6 +194,35 @@ find_noita() {
     return 0
   fi
   return 1
+}
+
+# Get the workshop base directory
+get_workshop_base() {
+  local noita_dir="$(find_noita)"
+  if [[ $? -ne 0 ]]; then
+    return 1
+  fi
+  readlink -f "$noita_dir/../../workshop/content/881100"
+}
+
+get_workshop_path() { # mod-path
+  if [[ ! -f "$1/workshop_id.txt" ]]; then
+    error "$1 missing workshop_id.txt"
+    return 1
+  fi
+  local workshop_base="$(get_workshop_base)"
+  if [[ $? -ne 0 ]]; then
+    error "Failed to find workshop base directory"
+    return 1
+  fi
+  local workshop_id="$(cat "$1/workshop_id.txt")"
+  local mod_path="$workshop_base/$workshop_id"
+  debug "mod_path=$mod_path"
+  if [[ ! -d "$mod_path" ]]; then
+    error "$1 (ID $workshop_id) not installed via workshop"
+    return 1
+  fi
+  echo "$mod_path"
 }
 
 # Archive the given path
@@ -278,14 +312,35 @@ if [[ $? -ne 0 ]]; then
 fi
 
 DEST_DIR="$NOITA/mods/$MOD_NAME"
-debug "Comparing . (as $MOD_NAME) with $DEST_DIR"
 
-compare_mods "$SELF" "$DEST_DIR"
+DIFF_FROM="$SELF"
+DIFF_TO="$DEST_DIR"
+case "$ACTION" in
+  diff)
+    DIFF_LEFT="local";
+    DIFF_RIGHT="deployed";
+    DIFF_FROM="$SELF";
+    DIFF_TO="$DEST_DIR";;
+  diffw)
+    DIFF_LEFT="local";
+    DIFF_RIGHT="workshop";
+    DIFF_FROM="$SELF";
+    DIFF_TO="$(get_workshop_path "$SELF")";;
+  diffd)
+    DIFF_LEFT="deployed";
+    DIFF_RIGHT="workshop";
+    DIFF_FROM="$DEST_DIR";
+    DIFF_TO="$(get_workshop_path "$SELF")";;
+esac
+
+debug "Comparing $DIFF_LEFT (as $DIFF_FROM) with $DIFF_RIGHT (as $DIFF_TO)"
+
+compare_mods "$DIFF_FROM" "$DIFF_TO"
 DIFF_STATUS=$?
 
 if [[ $DIFF_STATUS -ne 0 ]]; then
-  info "Detected differences between local and deployed directories"
-elif [[ -n "${FORCE_COPY:-}" ]]; then
+  info "Detected differences between $DIFF_LEFT and $DIFF_RIGHT directories"
+elif [[ -n "${FORCE_COPY:-}" ]] && [[ "$ACTION" != "cp" ]]; then
   info "No differences detected, but copying anyway"
 else
   info "No differences detected"

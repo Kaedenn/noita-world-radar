@@ -9,7 +9,6 @@
 --  Nearby configured spells or wands containing configured spells
 --  Nearby configured items
 --  Nearby configured material containers
---
 --]]
 
 dofile_once("mods/world_radar/config.lua")
@@ -88,11 +87,8 @@ function OnWorldPostUpdate()
     local show_closed = conf_get(CONF.SHOW_CLOSED)
     if conf_get(CONF.ENABLE) then
         if imgui.Begin("World Information Scanner###world_radar", nil, bit.bor(
-            --imgui.WindowFlags.NoFocusOnAppearing,
-            --imgui.WindowFlags.NoNavInputs,
             imgui.WindowFlags.HorizontalScrollbar,
-            imgui.WindowFlags.MenuBar
-            ))
+            imgui.WindowFlags.MenuBar))
         then
             do_call(_build_menu_bar_gui)
             do_call(_build_gui)

@@ -3,6 +3,6 @@
     description=""
     tags="quality of life,tweaks"
     dont_upload_folders="build"
-    dont_upload_files="Makefile.sh"
+    dont_upload_files="Makefile.sh,build.sh"
 > 
 </Mod>

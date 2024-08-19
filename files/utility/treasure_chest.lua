@@ -37,12 +37,8 @@
 --
 --]]
 
---[[ To use this in isolation:
-dofile("mods/world_radar/files/utility/treasure_chest.lua")
-cx, cy = 0, 0 -- Replace with your location
-SetRandomSeed(cx, cy)
-print_rewards(do_chest_get_rewards_super(cx, cy, 0, cx, cy, false))
---]]
+-- FIXME: Potion rewards seem inconsistent?
+-- FIXME: Gold rewards are inconsistent
 
 dofile_once("data/scripts/lib/utilities.lua")
 -- luacheck: globals random_from_array
@@ -823,14 +819,6 @@ function format_rewards(rewards)
         table.insert(text, line)
     end
     return text
-end
-
---[[ Print the rewards via the given imgui object (TODO) ]]
-function print_rewards(rewards, imgui)
-    local text = format_rewards(rewards)
-    for _, reward in ipairs(text) do
-        GamePrint(reward)
-    end
 end
 
 -- vim: set ts=4 sts=4 sw=4:

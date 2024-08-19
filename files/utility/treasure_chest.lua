@@ -34,7 +34,15 @@
 -- The amount of gold dropped by gold rain cannot be predicted because the
 -- random seed uses the newly-created entity ID. Because chest prediction
 -- does not spawn entities, this can't be done.
---
+
+dofile("mods/world_radar/files/utility/treasure_chest.lua")
+rewards = chest_get_rewards(entid)
+for _, reward in ipairs(rewards) do
+  for key, val in pairs(reward) do
+    print(key, smallfolk.dumps(val))
+  end
+end
+
 --]]
 
 -- FIXME: Potion rewards seem inconsistent?
@@ -42,10 +50,11 @@
 
 dofile_once("data/scripts/lib/utilities.lua")
 -- luacheck: globals random_from_array
+dofile_once("data/scripts/gun/gun_enums.lua")
+-- luacheck: globals ACTION_TYPE_UTILITY ACTION_TYPE_MODIFIER
 dofile_once("data/scripts/gun/gun_actions.lua")
 -- luacheck: globals actions
 dofile_once("data/scripts/game_helpers.lua")
--- luacheck: globals ACTION_TYPE_UTILITY ACTION_TYPE_MODIFIER
 
 REWARD = {
     ENTITY = "entity",

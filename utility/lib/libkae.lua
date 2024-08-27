@@ -1,4 +1,4 @@
---[[ Common functions for interactive Lua experimentation
+--[[ Common functions for interactive Lua experimentation (FULL)
 
 -- STRUCTURE ----------------------------------------------------------
 
@@ -987,7 +987,7 @@ kae = {
   debug = setmetatable({
     enable = false,
 
-    target = io.stderr,
+    target = io and io.stderr,
 
     getframe = function(adjust) -- TODO
     end,
@@ -1111,11 +1111,12 @@ kae = {
 
 -- If terse mode is enabled, then set some shorthand variables
 if rawget(_G, "libkae_terse") then
-  _G.k = {}
-  _G.k.t = kae.table
-  _G.k.a = kae.array
-  _G.k.s = kae.string
-  _G.k.o = kae.op
+  _G.k = {
+    c = kae.config,
+    t = kae.table,
+    a = kae.array,
+    s = kae.string,
+  }
 end
 
 -- Run the test suite if testing is enabled (TODO) {{{0

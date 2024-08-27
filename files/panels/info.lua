@@ -1,11 +1,7 @@
 --[[
 The "Info" Panel: Display interesting information
 
-IDEA: Add "include all unknown spells" button
-IDEA: Add "include all unkilled enemies" button
-    These could be quite noisy for early-game
-
-IDEA: Limit menu choices to discovered things
+FIXME: This file is huge
 
 TODO: Allow for searching for enemies by tag
 
@@ -14,6 +10,7 @@ TODO: Dynamically limit popup width to screen width
 TODO: Add I18N from shift_query to replace GameTextGet
 
 TODO: Add treasure chest drop scanning (wands, spells, containers)
+FIXME: Ensure treasure chest drop scanning is 100% correct
 
 TODO: Better feedback display for timed messages to show remaining time
     Show a line or a bar getting shorter? Like Twitch announcements
@@ -25,6 +22,15 @@ TODO: Non-radar improvements:
 TODO: Allow user to configure how the on-screen text is displayed
     Configure anchoring: currently bottom-left, but add other three
     Configure location
+
+TODO: Indicate Always Cast in "nearby spell" message
+    eg. "Wand with Always Cast Circle of Vigor detected nearby!!"
+
+IDEA: Add "include all unknown spells" button
+IDEA: Add "include all unkilled enemies" button
+    These could be quite noisy for early-game
+IDEA: Limit menu choices to discovered things
+IDEA: Special formatting on general enemy list for unkilled enemies
 --]]
 
 dofile_once("data/scripts/lib/utilities.lua")
@@ -47,17 +53,24 @@ dofile_once("mods/world_radar/files/utility/treasure_chest.lua")
 -- luacheck: globals entity_is_chest chest_get_rewards REWARD
 dofile_once("mods/world_radar/files/utility/orbs.lua")
 -- luacheck: globals Orbs world_get_name make_distance_sorter
+dofile_once("mods/world_radar/files/utility/eval.lua")
+-- luacheck: globals Eval
 dofile_once("mods/world_radar/files/radar.lua")
 -- luacheck: globals Radar RADAR_KIND_SPELL RADAR_KIND_ENTITY RADAR_KIND_MATERIAL RADAR_KIND_ITEM RADAR_ORB
 dofile_once("mods/world_radar/files/lib/utility.lua")
 -- luacheck: globals aggregate table_clear table_empty table_has_entry split_string
 
-NOWRAP = {wrap=0}
+NOWRAP = {wrap=0}           -- Suppress wrapping on hover popups
 
-AC_KEEP = 0
-AC_IGNORE = 1
-AC_REQUIRE = 2
+RARE_BIOME = 0.2            -- Biome modifiers "rare" threshold
+
+AC_KEEP = 0                 -- Ignore Always Cast
+AC_IGNORE = 1               -- Forbid Always Cast
+AC_REQUIRE = 2              -- Require Always Cast
 ACMAX = AC_REQUIRE + 1
+
+GUI_PAD_LEFT = 10           -- Default distance from left edge
+GUI_PAD_BOTTOM = 2          -- Default distance from bottom edge
 
 --[[ Panel class with default values.
 --
@@ -86,38 +99,38 @@ InfoPanel = {
     config = {
         tooltip_wrap = 400,             -- Default hover tooltip wrap margin
         import_num_lines = 6,           -- Height of the import textarea
-        message_timer = 60*10,          -- Default message time
-        range = math.huge,              -- Range of the radar
-        range_rule = "infinite",        -- Range of the radar, overrides range
-        rare_biome_mod = 0.2,           -- Modifiers below this are rare
-        show_images = true,             -- Enable images
-        rare_spells = {                 -- Default rare spell list
-            {"MANA_REDUCE", keep=1},          -- Add Mana
-            {"REGENERATION_FIELD", keep=0},   -- Circle of Vigour
+        message_timer = 60*10,          -- Default message time (10 seconds)
+        range = math.huge,              -- Range of the radar (infinite)
+        range_rule = "infinite",        -- Range of the radar, override
+        rare_biome_mod = 0.2,           -- Modifiers below this chance are rare
+        show_images = true,             -- Master image toggle
+        rare_spells = {                     -- Default rare spell list
+            {"MANA_REDUCE", keep=1},        -- Add Mana
+            {"REGENERATION_FIELD", keep=0}, -- Circle of Vigour
             {"LONG_DISTANCE_CAST", keep=0},
         },
-        rare_materials = {              -- Default rare material list
+        rare_materials = {                  -- Default rare material list
             "creepy_liquid",                -- Incredibly rare liquid
             "magic_liquid_hp_regeneration", -- Healthium
             "magic_liquid_weakness",        -- Diminution
             "urine",                        -- Spawns rarely in jars
         },
-        rare_entities = {               -- Default rare entity list
-            "$animal_worm_big",         -- Giant worm that can drop hearts
-            "$animal_chest_leggy",      -- Leggy chest mimic
-            "$animal_dark_alchemist",   -- Pahan muisto; heart mimic
-            "$animal_mimic_potion",     -- Mimicium potion
-            "$animal_playerghost",      -- Kummitus; wand ghost
-            "$animal_shaman_wind",      -- Valhe; spell refresh mimic
+        rare_entities = {                   -- Default rare entity list
+            "$animal_worm_big",             -- Giant worm that can drop hearts
+            "$animal_chest_leggy",          -- Leggy chest mimic
+            "$animal_dark_alchemist",       -- Pahan muisto; heart mimic
+            "$animal_mimic_potion",         -- Mimicium potion
+            "$animal_playerghost",          -- Kummitus; wand ghost
+            "$animal_shaman_wind",          -- Valhe; spell refresh mimic
         },
-        rare_items = {                  -- Default rare item list
+        rare_items = {                      -- Default rare item list
             "$item_chest_treasure_super",   -- Greater Treasure Chest
-            "$item_greed_die",          -- Greed Die
-            "$item_waterstone",         -- Vuoksikivi
+            "$item_greed_die",              -- Greed Die
+            "$item_waterstone",             -- Vuoksikivi
         },
-        gui = {                         -- On-screen UI adjustments
-            pad_left = 10,              -- Distance from left edge
-            pad_bottom = 2,             -- Distance from bottom edge
+        gui = {                             -- On-screen UI adjustments
+            pad_left = GUI_PAD_LEFT,        -- Distance from left edge
+            pad_bottom = GUI_PAD_BOTTOM,    -- Distance from bottom edge
         },
         icons = {
             height = nil,               -- nil -> calculate height
@@ -253,12 +266,6 @@ end
 
 --[[ Get all of the known entities ]]
 function InfoPanel:_get_entity_list()
-    --[[{
-    --  id = "blob",
-    --  name = "$animal_blob",
-    --  path = "data/entities/animals/blob.xml",
-    --  icon = "data/ui_gfx/animal_icons/blob.png",
-    --}]]
     if not self.env.entity_cache or #self.env.entity_cache == 0 then
         self.env.entity_cache = dofile("mods/world_radar/files/generated/entity_list.lua")
     end
@@ -267,12 +274,6 @@ end
 
 --[[ Get all of the known items ]]
 function InfoPanel:_get_item_list()
-    --[[{
-    --  id = "treasure_chest",
-    --  name = "$item_treasure_chest",
-    --  filename = "data/entities/items/pickup/chest_random.lua",
-    --  icon = "data/buildings_gfx/chest_random.png",
-    --}]]
     if not self.env.item_cache or #self.env.item_cache == 0 then
         self.env.item_cache = dofile("mods/world_radar/files/generated/item_list.lua")
     end
@@ -281,6 +282,12 @@ end
 
 --[[ Obtain the spell ID, name, and icon path for a given spell name/ID/filename ]]
 function InfoPanel:_get_spell_by_name(sname)
+    --[[{
+    --  id = 'MANA_REDUCE',
+    --  name = '$action_mana_reduce',
+    --  icon = 'data/ui_gfx/gun_actions/mana.png',
+    --  config = {keep=1, ignore_ac=1}
+    --}]]
     if sname:match("^%$") then sname = sname:gsub("^%$", "") end
     for _, entry in ipairs(self:_get_spell_list()) do
         local spinfo = {
@@ -301,6 +308,15 @@ end
 
 --[[ Obtain the material ID, name, etc. for the given name/filename ]]
 function InfoPanel:_get_material_by_name(mname)
+    --[[{
+    --  kind = "sand",
+    --  id = 135,
+    --  name = "gold",
+    --  uiname = "$mat_gold",
+    --  locname = "gold",
+    --  icon = "data/generated/material_icons/gold.png",
+    --  tags = {"[alchemy]", "[corrodible]", "[earth]", "[gold]", ...}
+    --}]]
     if self.env.material_cache and #self.env.material_cache > 0 then
         for _, entry in ipairs(self.env.material_cache) do
             if entry.name == mname then
@@ -318,6 +334,16 @@ end
 
 --[[ Obtain the entity ID, name, etc. for the given name/filename ]]
 function InfoPanel:_get_entity_by_name(ename)
+    --[[{
+    --  id = "blob",
+    --  name = "$animal_blob",
+    --  path = "data/entities/animals/blob.xml",
+    --  icon = "data/ui_gfx/animal_icons/blob.png",
+    --  data = {effects={}, health="1.5", herd="slimes"},
+    --  tags = "teleportable_NOT,enemy,..."
+    --
+    --  data.effects[idx] = {frames=number, name=string}
+    --}]]
     for _, entry in ipairs(self:_get_entity_list()) do
         if ename == entry.id or ename == entry.name then
             return entry
@@ -331,6 +357,13 @@ end
 
 --[[ Obtain the item ID, name, etc. for the given name/filename ]]
 function InfoPanel:_get_item_by_name(iname)
+    --[[{
+    --  id = "chest_random",
+    --  name = "$item_chest_treasure",
+    --  path = "data/entities/items/pickup/chest_random.xml",
+    --  icon = "data/buildings_gfx/chest_random.png",
+    --  tags = "teleportable_NOT,item_physics,chest,item_pickup,..."
+    --}]]
     for _, entry in ipairs(self:_get_item_list()) do
         if iname == entry.id or iname == entry.name then
             return entry
@@ -468,7 +501,10 @@ function InfoPanel:_find_containers()
     return containers
 end
 
---[[ Locate any rare enemies nearby ]]
+--[[ Locate any rare enemies nearby
+--
+-- {{entity=number, name=string, path=string, ...}}
+--]]
 function InfoPanel:_find_enemies()
     local enemies = {}
     local rare_ents = {}
@@ -492,7 +528,10 @@ function InfoPanel:_find_enemies()
     return enemies
 end
 
---[[ Search for nearby desirable items ]]
+--[[ Search for nearby desirable items
+--
+-- {{entity=number, name=string, path=string, item=item_def}}
+--]]
 function InfoPanel:_find_items()
     local items = {}
     for _, itempair in ipairs(self:_filter_entries(get_with_tags({"item_pickup"}))) do
@@ -1013,9 +1052,9 @@ function InfoPanel:_draw_spell_list(imgui)
         imgui.SameLine()
 
         local iac_label = ({
-            [AC_KEEP] = "[-]",
-            [AC_IGNORE] = "[I]",
-            [AC_REQUIRE] = "[R]",
+            [AC_KEEP] = "-",
+            [AC_IGNORE] = "I",
+            [AC_REQUIRE] = "R",
         })[entry.config.ignore_ac or AC_KEEP]
 
         if imgui.SmallButton(iac_label .. "###ignore_ac_" .. entry.id) then
@@ -1025,7 +1064,7 @@ function InfoPanel:_draw_spell_list(imgui)
             {"Determines the behavior if the found spell happens to be an Always Cast"},
             {"[-] will match spells regardless of Always Cast", clear_line=true},
             {"[I] will ignore spells if they're Always Cast", clear_line=true},
-            {"[R] will ignore spells to they're not Always Cast", clear_line=true},
+            {"[R] will ignore spells if they're not Always Cast", clear_line=true},
         }, NOWRAP)
         imgui.SameLine()
         local hover_func = self:_make_spell_tooltip_func(entry)
@@ -1726,6 +1765,19 @@ function InfoPanel:_format_chest_reward(reward)
     return line
 end
 
+--[[ Format a location ]]
+function InfoPanel:format_pos(x, y)
+    if conf_get(CONF.POS_RELATIVE) then
+        local px, py = EntityGetTransform(get_players()[1])
+        if px and py then
+            x = x - px
+            y = y - py
+        end
+        return ("[%d, %d]"):format(x, y)
+    end
+    return ("{%d, %d}"):format(x, y)
+end
+
 --[[ Add a timed message ]]
 function InfoPanel:message(contents, timer)
     local duration = timer or self.config.message_timer
@@ -1748,6 +1800,8 @@ end
 
 --[[ Public: called before draw or draw_closed regardless of visibility
 --
+-- This draws the debug screen.
+--
 -- Note: called *outside* the PushID/PopID guard!
 --]]
 function InfoPanel:on_draw_pre(imgui)
@@ -1764,6 +1818,21 @@ function InfoPanel:on_draw_pre(imgui)
     if not is_open then
         self.do_debug = false
     elseif show then
+
+        --[[ Eval box ]]
+        if imgui.CollapsingHeader("Eval") then
+            local this = self
+            Eval:set_print_function(function(message)
+                this.host:print(message)
+                this:message(message)
+            end)
+            local result = Eval:draw(imgui, self)
+            if result == Eval.FAIL then
+                self.host:print_error(Eval.result.error)
+            end
+        end
+
+        --[[ self.config dump ]]
         if imgui.CollapsingHeader("Configuration") then
             for key, val in pairs(self.config) do
                 imgui.Text(("self.config.%s = [%s]\"%s\""):format(
@@ -1771,6 +1840,7 @@ function InfoPanel:on_draw_pre(imgui)
             end
         end
 
+        --[[ Testing treasure chest reward formatting ]]
         if imgui.CollapsingHeader("Test Reward Formats") then
             local reward = {}
             if imgui.Button("Entity") then
@@ -1863,6 +1933,7 @@ function InfoPanel:on_draw_pre(imgui)
             end
         end
 
+        --[[ Exporting self.env or entry tables ]]
         if imgui.CollapsingHeader("Table Management") then
             if imgui.Button("Copy Entire Environment") then
                 local text = smallfolk.dumps(self.env)
@@ -1950,6 +2021,11 @@ function InfoPanel:init(environ, host, config)
     self.env.spell_text = ""
 
     self.env.messages = {}
+
+    self.env.debug = {
+        code = "",
+        lines = 10,
+    }
 
     if config then
         self:configure(config)
@@ -2202,7 +2278,7 @@ function InfoPanel:draw(imgui)
                 entry.name, table.concat(contents, ", ")))
             local ex, ey = EntityGetTransform(entry.entity)
             if ex ~= nil and ey ~= nil then
-                local pos_str = ("%d, %d"):format(ex, ey)
+                local pos_str = self:format_pos(ex, ey)
                 self.host:d(("%s %d at %s"):format(entry.name, entry.entity, pos_str))
             end
             found_something = true
@@ -2243,7 +2319,7 @@ function InfoPanel:draw(imgui)
             self.host:p(line)
             local ex, ey = EntityGetTransform(entity.entity)
             if ex ~= nil and ey ~= nil then
-                local pos_str = ("%d, %d"):format(ex, ey)
+                local pos_str = self:format_pos(ex, ey)
                 self.host:d(("%s %d at %s"):format(entity.name, entity.entity, pos_str))
             end
         end
@@ -2262,14 +2338,20 @@ function InfoPanel:draw(imgui)
                 spell_name = GameTextGet(spell_name)
             end
             local name = ("%s [%s]"):format(spell_name, spell)
+            local entry = self:_get_spell_by_name(spell)
             self.host:p({
                 "Spell",
-                {name, image=spell_data.sprite, color="lightcyan"},
+                {
+                    image=spell_data.sprite,
+                    hover=self:_make_spell_tooltip_func(entry),
+                    color="lightcyan",
+                    name,
+                },
                 "detected nearby!!",
             })
             local wx, wy = EntityGetTransform(entid)
             if wx ~= nil and wy ~= nil then
-                local pos_str = ("%d, %d"):format(wx, wy)
+                local pos_str = self:format_pos(wx, wy)
                 self.host:d(("Spell %d at %s with %s"):format(entid, pos_str, name))
             end
         end
@@ -2283,9 +2365,11 @@ function InfoPanel:draw(imgui)
                 if spell_name:match("^%$") then
                     spell_name = GameTextGet(spell_name)
                 end
+                local entry = self:_get_spell_by_name(spell)
                 local name = ("%s [%s]"):format(spell_name, spell)
                 table.insert(spell_list, {
                     image=spell_data.sprite,
+                    hover=self:_make_spell_tooltip_func(entry),
                     color="lightcyan",
                     name,
                 })
@@ -2298,7 +2382,7 @@ function InfoPanel:draw(imgui)
             })
             local wx, wy = EntityGetTransform(entid)
             if wx ~= nil and wy ~= nil then
-                local pos_str = ("%d, %d"):format(wx, wy)
+                local pos_str = self:format_pos(wx, wy)
                 self.host:d({
                     ("Wand %d at %s with"):format(entid, pos_str),
                     spell_list,
@@ -2332,11 +2416,8 @@ function InfoPanel:draw(imgui)
         self.host:p({separator_text="Items"})
         for _, entry in ipairs(aggregate(self:_get_nearby_items())) do
             local name, entities = unpack(entry)
-            local entname = EntityGetName(entities[1])
-            if not entname or entname == "" then
-                entname = EntityGetFilename(entities[1])
-            end
-            local iinfo = self:_get_item_by_name(entname)
+            local entfname = EntityGetFilename(entities[1])
+            local iinfo = self:_get_item_by_name(entfname)
 
             -- Print for things other than chests, as chests get special treatment
             if not entity_is_chest(entities[1]) then
@@ -2364,7 +2445,7 @@ function InfoPanel:draw(imgui)
                 table.insert(line, {name, color="lightcyan"})
                 if self.host.debugging then
                     table.insert(line, {
-                        ("%d at {%d,%d}"):format(entity, ex, ey),
+                        ("%d at %s"):format(entity, self:format_pos(ex, ey)),
                         color=self.host.colors.debug
                     })
                 end
@@ -2408,21 +2489,20 @@ function InfoPanel:draw(imgui)
         for _, entry in ipairs(aggregate(self:_get_nearby_enemies())) do
             local name, entities = unpack(entry)
             local first_entity = entities[1]
-            local entname = EntityGetName(first_entity)
-            local entinfo = {}
-            if entname and entname ~= "" then
-                entinfo = self:_get_entity_by_name(entname)
-            end
+            local entfname = EntityGetFilename(first_entity)
+            local entinfo = self:_get_entity_by_name(entfname)
+            local hover_fn = self:_make_enemy_tooltip_func(entinfo)
             if not entinfo.id then
-                entinfo = self:_get_entity_by_name(name)
-            end
-            if not entinfo.id then
-                entinfo = self:_get_entity_by_name(EntityGetFilename(first_entity))
+                hover_fn = function(imgui_, self_)
+                    imgui_.TextDisabled("Not a known entity")
+                    imgui_.Text(name)
+                    imgui_.Text(("Path: %s"):format(entfname))
+                end
             end
             self.host:p({
                 ("%dx"):format(#entities), {
                     image = entinfo.icon,
-                    hover = self:_make_enemy_tooltip_func(entinfo),
+                    hover = hover_fn,
                     fallback = "data/ui_gfx/icon_unkown.png",
                     name,
                 }

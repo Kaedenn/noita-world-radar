@@ -14,6 +14,7 @@ CONF = {
 
     RADAR_RANGE = "radar_range",
     RADAR_RANGE_MANUAL = "radar_range_manual",
+    POS_RELATIVE = "pos_relative",
     GUI_ANCHOR = "gui_anchor",
 
     ORB_ENABLE = "orb_enable",

@@ -120,6 +120,13 @@ mod_settings = {
                 value_display_multiplier = 1,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
+            {
+                id = "pos_relative",
+                ui_name = "Relative Positions",
+                ui_description = "Should coordinates be relative instead of absolute?",
+                value_default = false,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
             --[[
             {
                 id = "gui_anchor",

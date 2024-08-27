@@ -11,7 +11,8 @@ MOD_NAME="$(basename "$(readlink -f "$SELF")")"
 
 print_usage() {
   cat <<EOF >&2
-usage: $0 [-h] [-v|-V] [-n] [-b DIR] [-C] [-F] [-N DIR] [-a ARG] [ACTION]
+usage: $0 [-h] [-v|-V] [-n] [-b DIR] [-C] [-F] [-N DIR] [-a ARG] [-i PATH]
+          [-x PAT] [ACTION]
 
 actions:
     diff    compare local and deployed versions of this mod (default)
@@ -31,6 +32,8 @@ options:
     -F      copy items even if there are no detected differences
     -N DIR  specify path to Noita game directory
     -a ARG  prepend ARG to the diff command-line
+    -i PATH include PATH in the objects to copy over
+    -x PAT  exclude files matching PAT
 
 environment variables:
     NOITA   path to Noita game directory
@@ -41,8 +44,10 @@ EOF
 declare -a LUACHECK_ARGS=()
 NOITA_PATH="${NOITA:-}"
 declare -a DIFF_ARGS=()
+declare -a COPY_EXTRA=()
+declare -a EXCLUDE_EXTRA=('*.sh')
 
-while getopts "hvVnl:L:b:CFN:a:" arg; do
+while getopts "hvVnl:L:b:CFN:a:i:x:" arg; do
   case "$arg" in
     h) print_usage; exit 0;;
     v) DEBUG=1;;
@@ -55,6 +60,8 @@ while getopts "hvVnl:L:b:CFN:a:" arg; do
     F) FORCE_COPY=1;;
     N) NOITA_PATH="$OPTARG";;
     a) DIFF_ARGS+=("$OPTARG");;
+    i) COPY_EXTRA+=("$OPTARG");;
+    x) EXCLUDE_EXTRA+=("$OPTARG");;
   esac
 done
 shift $((OPTIND - 1))
@@ -129,13 +136,19 @@ compare_mods() { # local remote
   diff_args+=(-x "workshop")         # remove workshop symlink
   diff_args+=(-x .git -x .gitignore) # remove git directories
   diff_args+=(-x README.md)          # remove readme
+  diff_args+=(-x '*.sh')             # Noita doesn't like shell scripts
   diff_args+=(-x workshop_id.txt -x workshop.xml -x workshop_preview_image.png)
+  for pat in "${EXCLUDE_EXTRA[@]}"; do
+    diff_args+=(-x "$pat")
+  done
   if [[ -z "${DEBUG:-}" ]]; then
     diff_args+=("-q")
+  else
+    declare -p diff_args
   fi
   if [[ -d "$2" ]]; then
-    debug "diff ${diff_args[@]} -r -x '.*' '$1' '$2'"
-    diff ${diff_args[@]} -r -x '.*' "$1" "$2"
+    debug "diff ${diff_args[@]} -r -x .* '$1' '$2'"
+    diff "${diff_args[@]}" -r -x '.*' "$1" "$2"
     return $?
   fi
   return 1
@@ -265,12 +278,42 @@ archive_is_unique() { # path file
   return 0
 }
 
-# Check if we should skip deploying the given object
+# Check if we should skip deploying the given object; 0 = skip, 1 = include
 deploy_check_skip() { # path
   if [[ "$1" == build ]]; then return 0; fi
   if [[ "$1" =~ build/.* ]]; then return 0; fi
   if git check-ignore -q "$1"; then return 0; fi
+  for pat in "${EXCLUDE_EXTRA[@]}"; do
+    local result="$(find "$1" -maxdepth 0 -name "$pat" -print)"
+    if [[ -n "$result" ]]; then
+      debug "deploy_check_skip $1 due to $pat"
+      return 0
+    fi
+  done
   return 1
+}
+
+# Copy a single item in the current repo to the dest directory
+deploy_one() { # entry dest
+  local entry="$1"
+  local dest="$2"
+  local dpath="$(dirname "$entry")"
+  info "Replicating $entry to $dest/$entry"
+  if [[ "$entry" =~ \.lua$ ]]; then
+    do_luacheck "$entry"
+  fi
+  if [[ -n "$dpath" ]] && [[ "$dpath" != "." ]]; then
+    if [[ ! -d "$dest/$dpath" ]]; then
+      dry checked mkdir -p "$dest/$dpath"
+    fi
+  fi
+  if [[ ! -d "$entry" ]]; then
+    dry checked cp "$entry" "$dest/$entry"
+  elif [[ -e "$dest/$entry" ]]; then
+    dry checked cp -r "$entry" "$dest/"
+  else
+    dry checked cp -r "$entry" "$dest/$entry"
+  fi
 }
 
 # Copy the files in the current repo to the dest directory
@@ -278,17 +321,11 @@ deploy() { # dest
   local dest="$1"
   git ls-tree -r --name-only $(get_branch) | while read entry; do
     deploy_check_skip $entry && continue
-    if [[ "$entry" =~ \.lua$ ]]; then
-      do_luacheck "$entry"
-    fi
-    local dpath="$(dirname "$entry")"
-    info "Replicating $entry to $dest/$entry"
-    if [[ -n "$dpath" ]] && [[ "$dpath" != "." ]]; then
-      if [[ ! -d "$dest/$dpath" ]]; then
-        dry checked mkdir -p "$dest/$dpath"
-      fi
-    fi
-    dry checked cp "$entry" "$dest/$entry"
+    deploy_one "$entry" "$dest"
+  done
+
+  for entry in "${COPY_EXTRA[@]}"; do
+    deploy_one "$entry" "$dest"
   done
 }
 
@@ -313,14 +350,13 @@ fi
 
 DEST_DIR="$NOITA/mods/$MOD_NAME"
 
+DIFF_LEFT="local"
+DIFF_RIGHT="deployed"
 DIFF_FROM="$SELF"
 DIFF_TO="$DEST_DIR"
 case "$ACTION" in
-  diff)
-    DIFF_LEFT="local";
-    DIFF_RIGHT="deployed";
-    DIFF_FROM="$SELF";
-    DIFF_TO="$DEST_DIR";;
+  cp) ;;
+  diff) ;;
   diffw)
     DIFF_LEFT="local";
     DIFF_RIGHT="workshop";
@@ -331,6 +367,10 @@ case "$ACTION" in
     DIFF_RIGHT="workshop";
     DIFF_FROM="$DEST_DIR";
     DIFF_TO="$(get_workshop_path "$SELF")";;
+  *)
+    error "Invalid action $ACTION";
+    print_usage;
+    exit 1;;
 esac
 
 debug "Comparing $DIFF_LEFT (as $DIFF_FROM) with $DIFF_RIGHT (as $DIFF_TO)"

@@ -17,7 +17,6 @@ table.sort(nearest_main, make_distance_sorter(px, py))
 -- NOTE: This can be done through careful examination of newgame_plus.lua
 
 dofile_once("data/scripts/lib/utilities.lua")
--- luacheck: globals orb_map_get
 
 BIOME_EMPTY = "_EMPTY_"
 BIOME_SIZE = 512

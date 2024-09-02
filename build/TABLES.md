@@ -105,7 +105,7 @@ This is the layout of `info.env.spell_list`.
   icon:table          spell icon image definition; see above
   config:table        arbitrary table for configuration
     .keep:number      if 1, keep spell on pickup
-    .ignore_ac:boolean  if true, ignore wands that Always Cast this spell
+    .ignore_ac:number 0 -> disregard Always Cast, 1 -> forbid, 2 -> require
 ```
 
 ## Enemy List Entry
@@ -118,6 +118,7 @@ This is the layout of `info.env.entity_list`.
   path:string         path to the entity XML file
   icon:string         path to the entity icon, if one exists, or:
   icon:table          entity icon image definition; see above
+  tags:string         entity tags, comma-separated
   config:table        arbitrary table for configuration
 ```
 
@@ -148,5 +149,7 @@ This is the layout of `info.env.item_list`.
   path:string         path to the item XML file
   icon:string         path to the item icon, or:
   icon:table          item icon image definition; see above
+  config:table        arbitrary table for configuration
+    .keep:number      if 1, keep item on pickup
 ```
 

@@ -1,6 +1,5 @@
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/lib/mod_settings.lua")
--- luacheck: globals MOD_SETTING_SCOPE_RUNTIME
 
 -- Available if desired
 -- mod_setting_change_fn(mod_id, gui, in_main_menu, setting, old_value, new_value)

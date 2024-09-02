@@ -113,6 +113,7 @@ return {
   {icon="data/ui_gfx/items/greed_die.png", id="physics_greed_die", name="$item_greed_die", path="data/entities/items/pickup/physics_greed_die.xml", tags="hittable,teleportable_NOT,item_physics,item_pickup"},
   {icon="data/ui_gfx/items/kakke.png", id="poopstone", name="$item_kakka", path="data/entities/items/pickup/poopstone.xml", tags="hittable,teleportable_NOT,item_physics,item_pickup,poopstone"},
   {icon="data/ui_gfx/items/potion.png", id="potion", name="$item_potion", path="data/entities/items/pickup/potion.xml", tags="hittable,teleportable_NOT,item_physics,item_pickup,potion"},
+  {icon="data/ui_gfx/items/potion.png", id="potion_alcohol", name="$item_potion", path="data/entities/items/pickup/potion_alcohol.xml", tags="hittable,teleportable_NOT,item_physics,item_pickup,potion"},
   {icon="data/ui_gfx/items/potion_alchemist.png", id="potion_aggressive", name="$item_potion", path="data/entities/items/pickup/potion_aggressive.xml", tags="projectile_item,hittable,teleportable_NOT,item_physics,item_pickup,potion"},
   {icon="data/items_gfx/potion_normals.png", id="potion_mimic", name="$item_potion_mimic", path="data/entities/items/pickup/potion_mimic.xml", tags="teleportable_NOT,item_physics,item_pickup,effectable_prop"},
   {icon="data/ui_gfx/items/potion.png", id="pouch", name="$item_potion", path="data/entities/items/pickup/test/pouch.xml", tags="hittable,teleportable_NOT,item_physics"},

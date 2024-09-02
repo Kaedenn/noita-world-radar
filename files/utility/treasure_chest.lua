@@ -46,14 +46,10 @@ end
 --]]
 
 -- FIXME: Potion rewards seem inconsistent?
--- FIXME: Gold rewards are inconsistent
 
 dofile_once("data/scripts/lib/utilities.lua")
--- luacheck: globals random_from_array
 dofile_once("data/scripts/gun/gun_enums.lua")
--- luacheck: globals ACTION_TYPE_UTILITY ACTION_TYPE_MODIFIER
 dofile_once("data/scripts/gun/gun_actions.lua")
--- luacheck: globals actions
 dofile_once("data/scripts/game_helpers.lua")
 
 REWARD = {
@@ -101,9 +97,10 @@ function chest_get_rewards(entity_id)
     end
 
     local position_comp = EntityGetFirstComponent(entity_id, "PositionSeedComponent")
+    local seed_x, seed_y = rand_x, rand_y
     if position_comp then
-        rand_x = tonumber(ComponentGetValue(position_comp, "pos_x"))
-        rand_y = tonumber(ComponentGetValue(position_comp, "pos_y"))
+        seed_x = tonumber(ComponentGetValue(position_comp, "pos_x"))
+        seed_y = tonumber(ComponentGetValue(position_comp, "pos_y"))
     end
 
     local fname = EntityGetFilename(entity_id)
@@ -112,13 +109,13 @@ function chest_get_rewards(entity_id)
         SetRandomSeed(rand_x, rand_y)
         rewards = do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, false)
     elseif fname:match("chest_random") then
-        rand_x = rand_x + 509.7
-        rand_y = rand_y + 683.1
+        rand_x = seed_x + 509.7
+        rand_y = seed_y + 683.1
         SetRandomSeed(rand_x, rand_y)
         rewards = do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, false)
     elseif fname:match("utility_box") then
-        rand_x = rand_x + 509.7
-        rand_y = rand_y + 683.1
+        rand_x = seed_x + 509.7
+        rand_y = seed_y + 683.1
         SetRandomSeed(rand_x, rand_y)
         rewards = do_utility_box_get_rewards(x, y, entity_id, rand_x, rand_y, false)
     else
@@ -129,13 +126,15 @@ function chest_get_rewards(entity_id)
     end
 
     -- Expand potion rewards
+    local rx = rand_x - 4.5 -- TODO: Figure out why this happens
+    local ry = rand_y - 4
     for _, reward in ipairs(rewards) do
         if reward.type == REWARD.POTION or reward.type == REWARD.POUCH then
-            reward.content = do_potion_get_contents(rand_x, rand_y, reward.entity)
+            reward.content = do_potion_get_contents(rx, ry, reward.entity)
         elseif reward.type == REWARD.POTIONS then
             reward.contents = {}
             for _, fpath in ipairs(reward.entities) do
-                table.insert(do_potion_get_contents(rand_x, rand_y, fpath))
+                table.insert(do_potion_get_contents(rx, ry, fpath))
             end
         end
     end
@@ -699,7 +698,7 @@ end
 function do_potion_get_contents(rand_x, rand_y, potion_filename)
     SetRandomSeed(rand_x, rand_y)
     local material = nil
-    if potion_filename == CONTAINER.POTION then
+    if not potion_filename or potion_filename == CONTAINER.POTION then
         dofile("data/scripts/items/potion.lua")
         -- luacheck: globals materials_standard materials_magic
         material = "water"

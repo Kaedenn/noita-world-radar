@@ -3,7 +3,6 @@
 --]]
 
 dofile_once("data/scripts/lib/utilities.lua")
--- luacheck: globals get_players
 
 --[[ True if entity is a child of root ]]
 function is_child_of(entity, root)

@@ -2,6 +2,43 @@
 -- Biome-related helper functions
 --]]
 
+nxml = dofile_once("mods/world_radar/files/lib/nxml.lua")
+
+BIOME_EMPTY = "_EMPTY_"
+
+local _ModTextFileGetContent = ModTextFileGetContent
+
+--[[ Get biome information (name, path, modifier) for each biome ]]
+function get_biome_data()
+    local biomes_xml = nxml.parse(_ModTextFileGetContent("data/biome/_biomes_all.xml"))
+    local biomes = {}
+    for _, bdef in ipairs(biomes_xml.children) do
+        local biome_path = bdef.attr.biome_filename
+        local biome_name = biome_path:match("^data/biome/(.*).xml$")
+        local biome_uiname = BiomeGetValue(biome_path, "name")
+        if biome_uiname == "_EMPTY_" then
+            biome_uiname = biome_name
+        end
+        local modifier = BiomeGetValue(biome_path, "mModifierUIDescription")
+        local mod_data = biome_modifier_get(modifier) or {}
+        local show = true
+        if biome_is_default(biome_name, modifier) then show = false end
+        if biome_is_common(biome_name, modifier) then show = false end
+        if biome_name == "rainforest_open" then show = false end
+        if show then
+            biomes[biome_name] = {
+                name = biome_name,
+                uiname = biome_uiname,
+                path = biome_path,
+                modifier = modifier,
+                probability = mod_data.probability or 0,
+                text = GameTextGet(modifier),
+            }
+        end
+    end
+    return biomes
+end
+
 --[[ True if the given biome normally has the given modifier ]]
 function biome_is_default(biome_name, modifier)
     if modifier == nil or modifier == "" then return true end

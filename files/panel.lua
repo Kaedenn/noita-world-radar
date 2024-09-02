@@ -86,7 +86,6 @@ as follows:
 
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("mods/world_radar/config.lua")
--- luacheck: globals MOD_ID CONF conf_get conf_set
 
 --[[ Template object with default values for the Panel class ]]
 Panel = {

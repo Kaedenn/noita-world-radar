@@ -48,14 +48,27 @@ end
 --[[ Determine if the given table includes the given entry ]]
 function table_has_entry(tbl, entry)
     for _, item in ipairs(tbl) do
-        if item.path and entry.path and item.path == entry.path then
-            return true
-        end
-        if item.id == entry.id and item.name == entry.name then
+        if item == entry then
             return true
         end
     end
     return false
+end
+
+--[[ Add a bunch of items to the end of a table, in-place ]]
+function table_extend(tbl, values)
+    for _, value in ipairs(values) do
+        table.insert(tbl, value)
+    end
+end
+
+--[[ Build a new table as a concatenation of two or more tables ]]
+function table_concat(...)
+    local result = {}
+    for _, tbl in ipairs({...}) do
+        table_extend(result, tbl)
+    end
+    return result
 end
 
 --[[ Split a string into parts ]]
@@ -66,6 +79,22 @@ function split_string(inputstr, sep)
         table.insert(tokens, str)
     end
     return tokens
+end
+
+--[[ Return the first non-nil and non-empty value in the table, or nil ]]
+function first_of(tbl)
+    for _, entry in ipairs(tbl) do
+        if entry and entry ~= "" then
+            return entry
+        end
+    end
+    return nil
+end
+
+--[[ Generate a traceback (HACK) ]]
+function generate_traceback()
+    print_error("Generating traceback via SetPlayerSpawnLocation()...")
+    SetPlayerSpawnLocation()
 end
 
 -- vim: set ts=4 sts=4 sw=4:

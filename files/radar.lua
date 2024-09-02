@@ -1,7 +1,6 @@
 --[[ World Radar nearby radar ]]
 
 dofile_once("data/scripts/lib/utilities.lua")
--- luacheck: globals get_magnitude vec_normalize get_players
 
 RADAR_KIND_SPELL = 1
 RADAR_KIND_ENTITY = 2

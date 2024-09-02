@@ -12,9 +12,7 @@
 --]]
 
 dofile_once("mods/world_radar/config.lua")
--- luacheck: globals MOD_ID CONF conf_get
 dofile_once("mods/world_radar/files/utility/material.lua")
--- luacheck: globals generate_material_tables
 
 MaterialTables = {}
 KPanelLib = dofile("mods/world_radar/files/panel.lua")

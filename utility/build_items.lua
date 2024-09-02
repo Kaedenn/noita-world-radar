@@ -168,7 +168,10 @@ end
 --[[ Does the xml file content look like something we should use? ]]
 local function include_xml_bycontent(file_text)
     local patterns = {
-        "<ItemComponent", "<BookComponent", "<AbilityComponent",
+        "<ItemComponent",
+        "<BookComponent",
+        "<AbilityComponent",
+        "<Base file=\"data/entities/items/pickup",
     }
     for _, pattern in ipairs(patterns) do
         if file_text:find(pattern) then
@@ -421,9 +424,15 @@ function main()
     logger.debug("Searching for xml files in " .. data)
 
     local icons = get_item_icons(argv.data_path)
+    local file_list = argv.file_list
+    local data_path = ""
+    if #argv.file_list == 0 then
+        file_list = find_with_extension(data, "xml")
+        data_path = argv.data_path
+    end
 
     local itemlist = {}
-    for _, name in ipairs(find_with_extension(data, "xml")) do
+    for _, name in ipairs(file_list) do
         if not include_xml_byname(name) then goto continue end
         local content = read_file(name)
         if not include_xml_bycontent(content) then goto continue end

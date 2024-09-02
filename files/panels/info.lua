@@ -3,17 +3,11 @@ The "Info" Panel: Display interesting information
 
 FIXME: This file is huge
 
-FIXME: potion_alcohol.xml missing from item list
-    build_items.lua incorrectly omits items only having a base tag
-    as they don't look like items; include files if they look like
-    items or if they have a base tag that looks like an item.
-
 TODO: Dynamically limit popup width to screen width
 
 TODO: Add I18N from shift_query to replace GameTextGet
 
 TODO: Add treasure chest drop scanning (wands, spells, containers)
-FIXME: Ensure treasure chest drop scanning is 100% correct
 
 TODO: Better feedback display for timed messages to show remaining time
     Show a line or a bar getting shorter? Like Twitch announcements

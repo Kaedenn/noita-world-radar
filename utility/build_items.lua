@@ -440,12 +440,12 @@ function main()
         local root = nxml.parse(content)
         if root.name ~= "Entity" then goto continue end
 
-        expand_base_tags(root, argv.data_path, 1)
+        expand_base_tags(root, data_path, 1)
         logger.debug("File: %s", name)
 
         local filename = name
-        if filename:find(argv.data_path) then
-            filename = path_change_prefix(filename, argv.data_path, "data")
+        if filename:find(data_path) then
+            filename = path_change_prefix(filename, data_path, "data")
         end
         local item_entry = build_item_entry(root, filename)
         if item_entry.icon == "" then
@@ -455,7 +455,7 @@ function main()
         end
         if item_entry.icon:match("%.xml$") then
             logger.debug("Entry %s has xml sprite %s", item_entry.id, item_entry.icon)
-            local icon_path = path_change_prefix(item_entry.icon, "data", argv.data_path)
+            local icon_path = path_change_prefix(item_entry.icon, "data", data_path)
             item_entry.icon = parse_icon_xml(icon_path)
         end
         table.insert(itemlist, item_entry)
@@ -472,7 +472,7 @@ function main()
         return left_priority < right_priority
     end)
 
-    logger.info("Found %d items in %s", #itemlist, argv.data_path)
+    logger.info("Found %d items in %s", #itemlist, data_path)
 
     local ofile = io.stdout
     if argv.output ~= "-" then

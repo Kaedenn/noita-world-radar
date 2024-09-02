@@ -14,7 +14,7 @@
 --  content="material_name"         when type="potion"
 --  contents={"material_name", ...} when type="potions"
 --
--- Reward types:
+-- Treasure chest reward types:
 --  entity      Spawn a simple entity given by the path
 --  gold        Spawn gold nuggets; amount has the total value
 --  wand        Spawn a wand; entity is the path to the wand XML
@@ -25,11 +25,12 @@
 --  pouch       Spawn a material pouch, content=material
 --  reroll      Re-roll the drop table; amount=number of times
 --  convert     Convert the treasure chest sprite to gold dust
---  potions     (Greater Treasure Chest only) Spawn multiple potions;
---              amount=number of potions, entities={potion XMLs},
---              contents={materials}
---  goldrain    (Greater Treasure Chest only) Start a gold rain event
---  sampo       (Greater Treasure Chest only) The Sampo
+--
+-- Greater Treasure Chest reward types:
+--  potions     Spawn multiple potions; amount=number of potions,
+--              entities={potion XMLs}, contents={materials}
+--  goldrain    Start a gold rain event
+--  sampo       The Sampo
 --
 -- The amount of gold dropped by gold rain cannot be predicted because the
 -- random seed uses the newly-created entity ID. Because chest prediction
@@ -53,18 +54,18 @@ dofile_once("data/scripts/gun/gun_actions.lua")
 dofile_once("data/scripts/game_helpers.lua")
 
 REWARD = {
-    ENTITY = "entity",
-    GOLD = "gold",
-    WAND = "wand",
-    CARD = "card",
-    ITEM = "item",
-    POTION = "potion",
-    POUCH = "pouch",
-    REROLL = "reroll",
-    CONVERT = "convert",
-    POTIONS = "potions",
-    GOLDRAIN = "goldrain",
-    SAMPO = "sampo",
+    ENTITY = "entity",      -- Spawn an entity by path
+    GOLD = "gold",          -- Drop some gold nuggets
+    WAND = "wand",          -- Spawn a wand
+    CARD = "card",          -- Spawn a spell
+    ITEM = "item",          -- Spawn an item
+    POTION = "potion",      -- Spawn a potion
+    POUCH = "pouch",        -- Spawn a pouch
+    REROLL = "reroll",      -- Repeat a few more times
+    CONVERT = "convert",    -- Convert the entity to something
+    POTIONS = "potions",    -- Spawn several potions
+    GOLDRAIN = "goldrain",  -- Make it rain gold
+    SAMPO = "sampo",        -- Spawn The Sampo
 }
 
 CONTAINER = {
@@ -107,17 +108,17 @@ function chest_get_rewards(entity_id)
     local rewards = {}
     if fname:match("chest_random_super") then
         SetRandomSeed(rand_x, rand_y)
-        rewards = do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, false)
+        rewards = do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y)
     elseif fname:match("chest_random") then
         rand_x = seed_x + 509.7
         rand_y = seed_y + 683.1
         SetRandomSeed(rand_x, rand_y)
-        rewards = do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, false)
+        rewards = do_chest_get_rewards(x, y, entity_id, rand_x, rand_y)
     elseif fname:match("utility_box") then
         rand_x = seed_x + 509.7
         rand_y = seed_y + 683.1
         SetRandomSeed(rand_x, rand_y)
-        rewards = do_utility_box_get_rewards(x, y, entity_id, rand_x, rand_y, false)
+        rewards = do_utility_box_get_rewards(x, y, entity_id, rand_x, rand_y)
     else
         local pos_str = ("(%f,%f)"):format(x, y)
         local spawn_str = ("(%d,%d)"):format(rand_x, rand_y)
@@ -143,13 +144,7 @@ function chest_get_rewards(entity_id)
 end
 
 --[[ Obtain the chest rewards for the given entity ]]
-function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
-    local set_rand = false
-    if set_rand_ ~= nil then set_rand = set_rand_ end
-    if set_rand then
-        SetRandomSeed(GameGetFrameNum(), x + y + entity_id)
-    end
-
+function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y)
     local rewards = {}
     local count = 1
     while count > 0 do
@@ -398,13 +393,7 @@ function do_chest_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
 end
 
 --[[ Obtain the greater treasure chest rewards for the given entity ]]
-function do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, set_rand_)
-    local set_rand = false
-    if set_rand_ ~= nil then set_rand = set_rand_ end
-    if set_rand then
-        SetRandomSeed(GameGetFrameNum(), x + y + entity_id)
-    end
-
+function do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y)
     if Random(0, 100000) >= 100000 then
         return {{type="sampo"}}
     end
@@ -505,13 +494,7 @@ function do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y, set_rand_)
 end
 
 --[[ Obtain the utility box rewards for the given entity ]]
-function do_utility_box_get_rewards(x, y, entity_id, rand_x, rand_y, set_rand_)
-    local set_rand = false
-    if set_rand_ ~= nil then set_rand = set_rand_ end
-    if set_rand then
-        SetRandomSeed(GameGetFrameNum(), x + y + entity_id)
-    end
-
+function do_utility_box_get_rewards(x, y, entity_id, rand_x, rand_y)
     local rewards = {}
     local count = 1
     while count > 0 do
@@ -653,7 +636,7 @@ function get_random_card(card_x, card_y)
         end
     end
 
-    if string.len(item) > 0 then
+    if item ~= "" then
         return item
     end
 
@@ -687,14 +670,14 @@ function get_random_utility_card(x, y)
         end
     end
 
-    if string.len(item) > 0 then
+    if item ~= "" then
         return item
     end
 
     return nil
 end
 
---[[ Predict the contents of a potion ]]
+--[[ Predict the contents of a potion or pouch ]]
 function do_potion_get_contents(rand_x, rand_y, potion_filename)
     SetRandomSeed(rand_x, rand_y)
     local material = nil
@@ -776,7 +759,7 @@ function do_potion_get_contents(rand_x, rand_y, potion_filename)
     return material
 end
 
---[[ Generate text for use in Panel:p ]]
+--[[ Generate text for use in Panel:p (TODO: improve) ]]
 function format_rewards(rewards)
     local text = {}
     for idx, reward in ipairs(rewards) do
@@ -785,11 +768,9 @@ function format_rewards(rewards)
         local rentity = reward.entity or ""
         local rentities = reward.entities or {}
         local ramount = reward.amount or 0
-        if rname:match("^%$") then
-            local name = GameTextGet(rname)
-            if name and name ~= "" then
-                rname = name
-            end
+        local name = rname:gsub("%$[a-z_]+", GameTextGetTranslatedOrNot)
+        if name and name ~= "" then
+            rname = name
         end
 
         local line = {}
@@ -808,15 +789,13 @@ function format_rewards(rewards)
         elseif rtype == REWARD.ENTITY then
             line = ("Entity: %s [%s]"):format(rname, rentity)
         elseif rtype == REWARD.POTION then
-            line = ("Potion: %s [%s]"):format(rname, rentity)
+            line = ("Potion: %s [%s]"):format(reward.content, rentity)
         elseif rtype == REWARD.POUCH then
             line = ("Pouch: %s [%s]"):format(rname, rentity)
         elseif rtype == REWARD.REROLL then
             line = ("Reroll %dx"):format(ramount)
         elseif rtype == REWARD.POTIONS then
-            for _, potion in ipairs(rentities) do
-                line = ("Potion: %s"):format(potion)
-            end
+            line = ("Potions: %s"):format(table.concat(reward.contents, ", "))
         elseif rtype == REWARD.GOLDRAIN then
             line = "Gold rain"
         elseif rtype == REWARD.SAMPO then

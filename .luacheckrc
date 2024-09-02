@@ -1,3 +1,70 @@
+
+files["settings.lua"] = {
+  read_globals = {
+    -- "data/scripts/lib/mod_settings.lua"
+    "MOD_SETTING_SCOPE_RUNTIME",
+  }
+}
+
+files["files/panel.lua"] = {
+  read_globals = {
+    -- "mods/world_radar/config.lua"
+    "MOD_ID",
+    "CONF",
+    "conf_get",
+    "conf_set",
+  }
+}
+
+files["files/radar.lua"] = {
+  read_globals = {
+    -- "data/scripts/lib/utilities.lua"
+    "get_magnitude",
+    "vec_normalize",
+    "get_players",
+  }
+}
+
+files["files/utility/orbs.lua"] = {
+  read_globals = {
+    -- "data/scripts/lib/utilities.lua"
+    "orb_map_get",
+  }
+}
+
+files["files/utility/spell.lua"] = {
+  read_globals = {
+    -- "data/scripts/gun/gun_enums.lua"
+    "ACTION_TYPE_PROJECTILE",
+    "ACTION_TYPE_STATIC_PROJECTILE",
+    "ACTION_TYPE_MODIFIER",
+    "ACTION_TYPE_DRAW_MANY",
+    "ACTION_TYPE_MATERIAL",
+    "ACTION_TYPE_OTHER",
+    "ACTION_TYPE_UTILITY",
+    "ACTION_TYPE_PASSIVE",
+  }
+}
+
+files["files/utility/entity.lua"] = {
+  read_globals = {
+    -- "data/scripts/lib/utilities.lua"
+    "get_players",
+  }
+}
+
+files["files/utility/treasure_chest.lua"] = {
+  read_globals = {
+    -- "data/scripts/lib/utilities.lua"
+    "random_from_array",
+    -- "data/scripts/gun/gun_enums.lua"
+    "ACTION_TYPE_UTILITY",
+    "ACTION_TYPE_MODIFIER",
+    -- "data/scripts/gun/gun_actions.lua"
+    "actions",
+  }
+}
+
 files["files/panels/info.lua"] = {
   read_globals = {
     -- "data/scripts/lib/utilities.lua"

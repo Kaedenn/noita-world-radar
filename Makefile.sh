@@ -45,7 +45,7 @@ declare -a LUACHECK_ARGS=()
 NOITA_PATH="${NOITA:-}"
 declare -a DIFF_ARGS=()
 declare -a COPY_EXTRA=()
-declare -a EXCLUDE_EXTRA=('*.sh')
+declare -a EXCLUDE_EXTRA=('*.sh' .luacheckrc)
 
 while getopts "hvVnl:L:b:CFN:a:i:x:" arg; do
   case "$arg" in

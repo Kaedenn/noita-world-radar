@@ -1766,7 +1766,7 @@ function InfoPanel:message(contents, timer)
     text = text:gsub("[ ]+$", "")
     GamePrint(text)
 
-    if self.do_debug then
+    if self.env.debug.on then
         local debug_msg = smallfolk.dumps(contents)
         print(("InfoPanel:message(%s, %d)"):format(debug_msg, duration))
     end
@@ -1800,7 +1800,7 @@ end
 -- Note: called *outside* the PushID/PopID guard!
 --]]
 function InfoPanel:on_draw_pre(imgui)
-    if not self.do_debug then return end
+    if not self.env.debug.on then return end
     local tables = {
         {"Spell", "spell_list"},
         {"Material", "material_list"},
@@ -1811,7 +1811,7 @@ function InfoPanel:on_draw_pre(imgui)
         imgui.WindowFlags.HorizontalScrollbar)
     local show, is_open = imgui.Begin("World Radar Debug", true, flags)
     if not is_open then
-        self.do_debug = false
+        self.env.debug.on = false
     elseif show then
 
         --[[ Eval box ]]
@@ -1820,10 +1820,18 @@ function InfoPanel:on_draw_pre(imgui)
             Eval:set_print_function(function(message)
                 this.host:print(message)
                 this:message(message)
+                table.insert(self.env.debug.output, message)
             end)
             local result = Eval:draw(imgui, self)
             if result == Eval.FAIL then
                 self.host:print_error(Eval.result.error)
+            end
+            if imgui.Button("Clear") then
+                self.env.debug.output = {}
+            end
+            imgui.SeparatorText("Output")
+            for _, line in ipairs(self.env.debug.output) do
+                imgui.Text(line)
             end
         end
 
@@ -1965,11 +1973,11 @@ function InfoPanel:init(environ, host, config)
 
     Orbs:init()
 
-    self.debug = {}
-    self.do_debug = false
     self.env.debug = {
+        on = false,
         code = "",
         lines = 10,
+        output = {},
     }
 
     for _, bpair in ipairs(self.modes) do
@@ -2105,7 +2113,7 @@ function InfoPanel:draw_menu(imgui)
         end
         imgui.Separator()
         if imgui.MenuItem("Toggle Internal Debugging") then
-            self.do_debug = not self.do_debug
+            self.env.debug.on = not self.env.debug.on
         end
         imgui.EndMenu()
     end

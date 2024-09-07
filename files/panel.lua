@@ -86,6 +86,7 @@ as follows:
 
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("mods/world_radar/config.lua")
+dofile_once("mods/world_radar/files/lib/utility.lua")
 
 --[[ Template object with default values for the Panel class ]]
 Panel = {
@@ -237,6 +238,16 @@ function Panel:set_debugging(enable)
     conf_set(CONF.DEBUG, self.debugging)
 end
 
+--[[ Has this exact message been logged before? ]]
+function Panel:message_unique(msg)
+    for _, line in ipairs(self.lines) do
+        if self:line_to_string(line) ~= self:line_to_string(msg) then
+            return true
+        end
+    end
+    return false
+end
+
 --[[ Add a debug line (if debugging is enabled) ]]
 function Panel:d(msg)
     if self.debugging then
@@ -246,13 +257,11 @@ end
 
 --[[ Add a debug line unless it already exists; returns true on success ]]
 function Panel:d_unique(msg)
-    for _, line in ipairs(self.lines) do
-        if self:line_to_string(line) ~= self:line_to_string(msg) then
-            return false
-        end
+    if self:message_unique(msg) then
+        self:d(msg)
+        return true
     end
-    self:d(msg)
-    return true
+    return false
 end
 
 --[[ Add a line ]]
@@ -262,13 +271,11 @@ end
 
 --[[ Add a line unless it already exists; returns true on success ]]
 function Panel:p_unique(msg)
-    for _, line in ipairs(self.lines) do
-        if self:line_to_string(line) ~= self:line_to_string(msg) then
-            return false
-        end
+    if self:message_unique(msg) then
+        self:p(msg)
+        return true
     end
-    self:p(msg)
-    return true
+    return false
 end
 
 --[[ Prepend a line ]]
@@ -278,13 +285,11 @@ end
 
 --[[ Prepend a line unless it already exists; returns true on success ]]
 function Panel:prepend_unique(msg)
-    for _, line in ipairs(self.lines) do
-        if self:line_to_string(line) ~= self:line_to_string(msg) then
-            return false
-        end
+    if self:message_unique(msg) then
+        self:prepend(msg)
+        return true
     end
-    self:prepend(msg)
-    return true
+    return false
 end
 
 --[[ Clear the text ]]
@@ -303,9 +308,12 @@ end
 
 --[[ Print text to the panel, the game, and to the logger (if enabled) ]]
 function Panel:print_error(msg)
-    self:p({{"ERROR:", color="lightred"}, msg})
-    GamePrint(("ERROR: %s"):format(msg))
-    print_error(msg) -- Writes to logger.txt if logging is enabled
+    if self:message_unique(msg) then
+        self:p({{"ERROR:", color="lightred"}, msg})
+        GamePrint(("ERROR: %s"):format(msg))
+        print_error(msg) -- Writes to logger.txt if logging is enabled
+        generate_traceback()
+    end
 end
 
 --[[ True if the given panel ID refers to a known Panel object ]]
@@ -544,10 +552,15 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
 
         -- Display "time remaining" as a simple percentage
         if line.duration and line.max_duration then
-            local pct = math.floor(line.duration / line.max_duration * 100)
-            local prefix = ("%02d"):format(math.min(pct, 99))
-            imgui.SetNextItemWidth(10) -- FIXME: Calculate actual width
-            imgui.TextDisabled(prefix)
+            local ratio = line.duration / line.max_duration
+            if imgui.ProgressBar then
+                imgui.ProgressBar(ratio, 16, imgui.GetTextLineHeight())
+            else
+                local percent = math.floor(ratio * 100)
+                local prefix = ("%02d"):format(math.min(percent, 99))
+                imgui.SetNextItemWidth(16) -- FIXME: Calculate actual width
+                imgui.TextDisabled(prefix)
+            end
             if imgui.IsItemHovered() then
                 if imgui.BeginTooltip() then
                     imgui.Text("Click to clear")

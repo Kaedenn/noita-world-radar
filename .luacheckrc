@@ -13,6 +13,8 @@ files["files/panel.lua"] = {
     "CONF",
     "conf_get",
     "conf_set",
+    -- "mods/world_radar/files/lib/utility.lua"
+    "generate_traceback",
   }
 }
 

@@ -11,43 +11,55 @@ RADAR_ORB = 5
 
 RADAR_SPRITE_MAP = {
     [RADAR_KIND_SPELL] = {
+        "mods/world_radar/files/images/particles/radar_spell_far.png",
         "mods/world_radar/files/images/particles/radar_spell_faint.png",
         "mods/world_radar/files/images/particles/radar_spell_medium.png",
         "mods/world_radar/files/images/particles/radar_spell_strong.png",
+        "mods/world_radar/files/images/particles/radar_spell_near.png",
     },
     [RADAR_KIND_ENTITY] = {
+        "mods/world_radar/files/images/particles/radar_entity_far.png",
         "mods/world_radar/files/images/particles/radar_entity_faint.png",
         "mods/world_radar/files/images/particles/radar_entity_medium.png",
         "mods/world_radar/files/images/particles/radar_entity_strong.png",
+        "mods/world_radar/files/images/particles/radar_entity_near.png",
     },
     [RADAR_KIND_MATERIAL] = {
+        "mods/world_radar/files/images/particles/radar_material_far.png",
         "mods/world_radar/files/images/particles/radar_material_faint.png",
         "mods/world_radar/files/images/particles/radar_material_medium.png",
         "mods/world_radar/files/images/particles/radar_material_strong.png",
+        "mods/world_radar/files/images/particles/radar_material_near.png",
     },
     [RADAR_KIND_ITEM] = {
+        "mods/world_radar/files/images/particles/radar_item_far.png",
         "mods/world_radar/files/images/particles/radar_item_faint.png",
         "mods/world_radar/files/images/particles/radar_item_medium.png",
         "mods/world_radar/files/images/particles/radar_item_strong.png",
+        "mods/world_radar/files/images/particles/radar_item_near.png",
     },
     [RADAR_ORB] = {
+        "mods/world_radar/files/images/particles/radar_orb_far.png",
         "mods/world_radar/files/images/particles/radar_orb_faint.png",
         "mods/world_radar/files/images/particles/radar_orb_medium.png",
         "mods/world_radar/files/images/particles/radar_orb_strong.png",
+        "mods/world_radar/files/images/particles/radar_orb_near.png",
     },
 }
 
 Radar = {
+    scales = {
+        scale_far = 0.8,        -- >= 80% of range
+        scale_faint = 0.6,      -- >= 60% of range
+        scale_medium = 0.4,     -- >= 40% of range
+        scale_strong = 0.2,     -- >= 20% of range
+    },
     config = {
         range = 400,
-        range_faint = 400 * 0.8,
-        range_medium = 400 * 0.5,
         indicator_distance = 40,
     },
     _config_next = {
         range = nil,
-        range_faint = nil,
-        range_medium = nil,
         indicator_distance = nil,
     },
 
@@ -71,14 +83,8 @@ function Radar:configure(values)
             conf_table[conf_key] = conf_value
         end
     end
-    -- Update range_faint and range_medium automatically if range is updated
     if conf_set.range then
-        if not conf_set.range_faint then
-            conf_table.range_faint = conf_table.range * 0.8
-        end
-        if not conf_set.range_medium then
-            conf_table.range_medium = conf_table.range * 0.5
-        end
+        conf_table.range = conf_set.range
     end
 end
 
@@ -97,9 +103,11 @@ function Radar:draw_for_pos(ent_x, ent_y, kind)
     local distance = get_magnitude(dx, dy)
 
     local indicator_distance = self:get("indicator_distance")
-    local range = self:get("range")
-    local range_faint = self:get("range_faint") or range * 0.8
-    local range_medium = self:get("range_medium") or range * 0.5
+    local range = self:get("range") -- range_near
+    local range_strong = range * self.scales.scale_strong
+    local range_medium = range * self.scales.scale_medium
+    local range_faint = range * self.scales.scale_faint
+    local range_far = range * self.scales.scale_far
     for key, _ in pairs(self._config_next) do self._config_next[key] = nil end
 
     local nx, ny = vec_normalize(dx, dy)
@@ -109,12 +117,16 @@ function Radar:draw_for_pos(ent_x, ent_y, kind)
     local sprite_list = RADAR_SPRITE_MAP[kind]
 
     local sprite
-    if distance > range_faint then
+    if distance > range_far then
         sprite = sprite_list[1]
-    elseif distance > range_medium then
+    elseif distance > range_faint then
         sprite = sprite_list[2]
-    else
+    elseif distance > range_medium then
         sprite = sprite_list[3]
+    elseif distance > range_strong then
+        sprite = sprite_list[4]
+    else
+        sprite = sprite_list[5]
     end
     if sprite then
         GameCreateSpriteForXFrames(sprite, ind_x, ind_y, true, 0, 0, 1, true)

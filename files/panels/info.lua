@@ -9,9 +9,6 @@ TODO: Add I18N from shift_query to replace GameTextGet
 
 TODO: Add treasure chest drop scanning (wands, spells, containers)
 
-TODO: Better feedback display for timed messages to show remaining time
-    Show a line or a bar getting shorter? Like Twitch announcements
-
 TODO: Non-radar improvements:
     Only display the primary biome of a biome group
     Add "show triggers" (eg. temple collapse) via barrier spell effect
@@ -398,6 +395,7 @@ function InfoPanel:_find_spells()
         local entid = entry[1]
         for _, spell_info in ipairs(wand_get_spells(entid)) do
             local spell_id, spell = unpack(spell_info)
+            if not EntityGetIsAlive(entid) then goto continue end
             local spinfo = spell_table[spell]
             if not spinfo then goto continue end
             local spconfig = spinfo.config or {}
@@ -416,14 +414,14 @@ function InfoPanel:_find_spells()
         local entid = entry[1]
         local spell = card_get_spell(entid)
         local parent = EntityGetParent(entid)
-        if not self.env.wand_matches[parent] then
-            if spell and spell_table[spell] then
-                local spconfig = spell_table[spell].config or {}
-                if _want_ac_spell(spconfig.ignore_ac, spell_is_always_cast(entid)) then
-                    self.env.card_matches[entid] = true
-                end
+        if self.env.wand_matches[parent] then goto continue end
+        if spell and spell_table[spell] then
+            local spconfig = spell_table[spell].config or {}
+            if _want_ac_spell(spconfig.ignore_ac, spell_is_always_cast(entid)) then
+                self.env.card_matches[entid] = true
             end
         end
+        ::continue::
     end
 end
 
@@ -642,7 +640,8 @@ function InfoPanel:_draw_onscreen_gui()
             local r = self.config.near_range
             for _, chest_id in ipairs(EntityGetInRadiusWithTag(px, py, r, tag_name)) do
                 local lines = {"Treasure chest should drop..."}
-                local rewards = format_rewards(chest_get_rewards(chest_id))
+                local reward_list = chest_get_rewards(chest_id, self.env.debug.on)
+                local rewards = format_rewards(reward_list)
                 table_extend(lines, rewards)
                 draw_lines(lines)
             end
@@ -2329,14 +2328,16 @@ function InfoPanel:draw(imgui)
 
     if self.env.find_spells then
         for entid, _ in pairs(self.env.card_matches) do
+            if not entid then goto continue end
+            if not EntityGetIsAlive(entid) then goto continue end
+            local spell = card_get_spell(entid)
+            if not spell then
+                self.host:print_error(("Card %d lacks spell"):format(entid))
+                goto continue
+            end
             if not found_something then
                 self.host:p({separator_text="Found something!!", color="yellow"})
                 found_something = true
-            end
-            local spell = card_get_spell(entid)
-            if not spell then
-                self.host:print_error(("Card %d lacks spell"):format(spell))
-                goto continue
             end
             local spell_name = GameTextGetTranslatedOrNot(spell_get_name(spell))
             local spell_data = spell_get_data(spell)
@@ -2363,6 +2364,8 @@ function InfoPanel:draw(imgui)
 
         self:_find_spells()
         for entid, ent_spells in pairs(self.env.wand_matches) do
+            if not entid then goto continue end
+            if not EntityGetIsAlive(entid) then goto continue end
             if not found_something then
                 self.host:p({separator_text="Found something!!", color="yellow"})
                 found_something = true
@@ -2473,7 +2476,7 @@ function InfoPanel:draw(imgui)
                         text = "View",
                         id = ("chest_%d_inspect"):format(entity),
                         func = function(this, ent, phost, pimgui)
-                            local rewards = chest_get_rewards(ent)
+                            local rewards = chest_get_rewards(ent, self.env.debug.on)
                             for _, reward in ipairs(rewards) do
                                 local rline = this:_format_chest_reward(reward)
                                 this:message({image=iinfo.icon, rline})

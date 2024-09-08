@@ -46,7 +46,7 @@ end
 
 --]]
 
--- FIXME: Potion rewards seem inconsistent?
+-- FIXME: Potion rewards are incorrect
 
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/gun/gun_enums.lua")
@@ -90,7 +90,7 @@ function entity_is_chest(entid)
 end
 
 --[[ Obtain the rewards that would be dropped by the treasure chest ]]
-function chest_get_rewards(entity_id)
+function chest_get_rewards(entity_id, do_debug)
     local x, y = EntityGetTransform(entity_id)
     local rand_x, rand_y = x, y
     if rand_x == nil or rand_y == nil then
@@ -108,16 +108,28 @@ function chest_get_rewards(entity_id)
     local rewards = {}
     if fname:match("chest_random_super") then
         SetRandomSeed(rand_x, rand_y)
+        if do_debug then
+            print(("Entity %d: {%f, %f} rand={%f, %f}"):format(
+                entity_id, seed_x, seed_y, rand_x, rand_y))
+        end
         rewards = do_chest_get_rewards_super(x, y, entity_id, rand_x, rand_y)
     elseif fname:match("chest_random") then
         rand_x = seed_x + 509.7
         rand_y = seed_y + 683.1
         SetRandomSeed(rand_x, rand_y)
+        if do_debug then
+            print(("Entity %d: {%f, %f} rand={%f, %f}"):format(
+                entity_id, seed_x, seed_y, rand_x, rand_y))
+        end
         rewards = do_chest_get_rewards(x, y, entity_id, rand_x, rand_y)
     elseif fname:match("utility_box") then
         rand_x = seed_x + 509.7
         rand_y = seed_y + 683.1
         SetRandomSeed(rand_x, rand_y)
+        if do_debug then
+            print(("Entity %d: {%f, %f} rand={%f, %f}"):format(
+                entity_id, seed_x, seed_y, rand_x, rand_y))
+        end
         rewards = do_utility_box_get_rewards(x, y, entity_id, rand_x, rand_y)
     else
         local pos_str = ("(%f,%f)"):format(x, y)
@@ -131,11 +143,11 @@ function chest_get_rewards(entity_id)
     local ry = rand_y - 4
     for _, reward in ipairs(rewards) do
         if reward.type == REWARD.POTION or reward.type == REWARD.POUCH then
-            reward.content = do_potion_get_contents(rx, ry, reward.entity)
+            reward.content = do_potion_get_contents(rx, ry, reward.entity, do_debug)
         elseif reward.type == REWARD.POTIONS then
             reward.contents = {}
             for _, fpath in ipairs(reward.entities) do
-                table.insert(do_potion_get_contents(rx, ry, fpath))
+                table.insert(do_potion_get_contents(rx, ry, fpath, do_debug))
             end
         end
     end
@@ -678,7 +690,11 @@ function get_random_utility_card(x, y)
 end
 
 --[[ Predict the contents of a potion or pouch ]]
-function do_potion_get_contents(rand_x, rand_y, potion_filename)
+function do_potion_get_contents(rand_x, rand_y, potion_filename, do_debug)
+    if do_debug then
+        print(("Potion %s: SetRandomSeed(%f, %f)"):format(potion_filename, rand_x, rand_y))
+    end
+
     SetRandomSeed(rand_x, rand_y)
     local material = nil
     if not potion_filename or potion_filename == CONTAINER.POTION then
@@ -759,7 +775,7 @@ function do_potion_get_contents(rand_x, rand_y, potion_filename)
     return material
 end
 
---[[ Generate text for use in Panel:p (TODO: improve) ]]
+--[[ Format rewards as a table of lines ]]
 function format_rewards(rewards)
     local text = {}
     for idx, reward in ipairs(rewards) do

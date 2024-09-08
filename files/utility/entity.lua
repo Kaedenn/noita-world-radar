@@ -74,6 +74,13 @@ end
 
 --[[ Format the display name for the given animal ]]
 function animal_build_name(name, path)
+    local function path_to_string(dirname, basename)
+        if dirname == basename then
+            return dirname
+        end
+        return ("%s (%s)"):format(basename, dirname)
+    end
+
     local locname = name
     if name ~= "" and name:match("^[$][%a]+_[%a%d_]+$") then
         locname = GameTextGet(name)
@@ -82,13 +89,7 @@ function animal_build_name(name, path)
     end
     local label = path:gsub("^[%a_/]+/([%a%d_]+).xml", "%1") -- basename
     if path:match("data/entities/animals/([%a_]+)/([%a%d_]+).xml") then
-        label = path:gsub("data/entities/animals/([%a_]+)/([%a%d_]+).xml",
-            function(dirname, basename)
-                if dirname == basename then
-                    return dirname
-                end
-                return ("%s (%s)"):format(basename, dirname)
-            end)
+        label = path:gsub("data/entities/animals/([%a_]+)/([%a%d_]+).xml", path_to_string)
     elseif path:match("data/entities/animals/([%a%d_]+).xml") then
         label = path:gsub("data/entities/animals/([%a%d_]+).xml", "%1")
     end
@@ -172,13 +173,13 @@ function get_with_tags(tags, filters)
     local entities = {}
     for _, tag in ipairs(tags) do
         for _, entity in ipairs(EntityGetWithTag(tag)) do
-            local add_me = true
+            if not entity or entity == 0 then goto continue end
+            if not EntityGetIsAlive(entity) then goto continue end
             local is_held = is_child_of(entity, nil)
-            if filters.no_player and is_held then add_me = false end
-            if filters.player and not is_held then add_me = false end
-            if add_me then
-                entities[entity] = get_name(entity)
-            end
+            if filters.no_player and is_held then goto continue end
+            if filters.player and not is_held then goto continue end
+            entities[entity] = get_name(entity)
+            ::continue::
         end
     end
     local results = {}

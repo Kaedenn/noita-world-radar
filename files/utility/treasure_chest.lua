@@ -773,7 +773,7 @@ function format_rewards(rewards)
             rname = name
         end
 
-        local line = {}
+        local line = ""
         if rtype == REWARD.WAND then
             line = ("Wand: %s [%s]"):format(rname, rentity)
         elseif rtype == REWARD.CARD then

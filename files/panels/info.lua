@@ -575,7 +575,7 @@ function InfoPanel:_draw_onscreen_gui()
     end
 
     local function draw_lines(lines)
-        for idx=#lines, 0, -1 do
+        for idx=#lines, 1, -1 do
             draw_text(lines[idx])
         end
     end

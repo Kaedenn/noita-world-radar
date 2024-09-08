@@ -96,8 +96,6 @@ info() { diag "$(color 1 94 INFO)" "$@"; }
 warn() { diag "$(color 1 93 WARNING)" "$@"; }
 debug() { if [[ -n "${DEBUG:-}" ]]; then diag "$(color 1 92 DEBUG)" "$@"; fi; }
 
-get_branch() { git branch --show-current 2>/dev/null; }
-
 dry() { # command...
   if [[ -z "${DRY_RUN:-}" ]]; then
     $@; return $?
@@ -129,23 +127,30 @@ checked() { # command...
 # Compare two directories. Returns 1 on differences.
 compare_mods() { # local remote
   local diff_args=(${DIFF_ARGS[@]})
-  diff_args+=(-x "$(basename "$0")") # because this script isn't required
-  diff_args+=(-x "*.tar.gz")         # because backups
-  diff_args+=(-x "ref")              # remove reference items
-  diff_args+=(-x "build")            # remove compilation/bundling stuff
-  diff_args+=(-x "workshop")         # remove workshop symlink
-  diff_args+=(-x .git -x .gitignore) # remove git directories
-  diff_args+=(-x README.md)          # remove readme
-  diff_args+=(-x '*.sh')             # Noita doesn't like shell scripts
+  diff_args+=(-x "$(basename "$0")")  # because this script isn't required
+  diff_args+=(-x "*.tar.gz")          # because backups
+  diff_args+=(-x "ref")               # remove reference items
+  diff_args+=(-x "build")             # remove compilation/bundling stuff
+  diff_args+=(-x .gitignore)          # remove gitignore
+  diff_args+=(-x README.md)           # remove readme
+  diff_args+=(-x '*.sh')              # Noita doesn't like shell scripts
   diff_args+=(-x workshop_id.txt -x workshop.xml -x workshop_preview_image.png)
+
+  for line in $(git ls-files --directory -o -x '*.swp' | sed -e 's/\/$//'); do
+    debug "Excluding untracked file $line"
+    diff_args+=(-x "$line")
+  done
+
   for pat in "${EXCLUDE_EXTRA[@]}"; do
     diff_args+=(-x "$pat")
   done
+
   if [[ -z "${DEBUG:-}" ]]; then
     diff_args+=("-q")
   else
     declare -p diff_args
   fi
+
   if [[ -d "$2" ]]; then
     debug "diff ${diff_args[@]} -r -x .* '$1' '$2'"
     diff "${diff_args[@]}" -r -x '.*' "$1" "$2"
@@ -319,7 +324,7 @@ deploy_one() { # entry dest
 # Copy the files in the current repo to the dest directory
 deploy() { # dest
   local dest="$1"
-  git ls-tree -r --name-only $(get_branch) | while read entry; do
+  git ls-files -c | while read entry; do
     deploy_check_skip $entry && continue
     deploy_one "$entry" "$dest"
   done

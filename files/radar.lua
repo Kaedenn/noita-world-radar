@@ -49,10 +49,10 @@ RADAR_SPRITE_MAP = {
 
 Radar = {
     scales = {
-        scale_far = 0.8,        -- >= 80% of range
-        scale_faint = 0.6,      -- >= 60% of range
-        scale_medium = 0.4,     -- >= 40% of range
-        scale_strong = 0.2,     -- >= 20% of range
+        scale_far = 0.9,        -- >= 90% of range
+        scale_faint = 0.7,      -- >= 70% of range
+        scale_medium = 0.5,     -- >= 50% of range
+        scale_strong = 0.3,     -- >= 30% of range
     },
     config = {
         range = 400,

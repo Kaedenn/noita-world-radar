@@ -138,6 +138,44 @@ function get_name(entity)
     return path
 end
 
+--[[ Get a unique identifier that can be used to look up this entity ]]
+function entity_get_lookup_key(entity)
+    local fname = EntityGetFilename(entity)
+    if fname and fname ~= "" and fname ~= "??SAV/player.xml" then
+        return fname
+    end
+
+    -- Items
+    local comps = EntityGetComponentIncludingDisabled(entity, "ItemComponent") or {}
+    for _, comp in ipairs(comps) do
+        local name = ComponentGetValue2(comp, "item_name")
+        if name and name ~= "" then
+            return name
+        end
+    end
+
+    -- Animals
+    comps = EntityGetComponentIncludingDisabled(entity, "GameStatsComponent") or {}
+    for _, comp in ipairs(comps) do
+        local name = ComponentGetValue2(comp, "name")
+        if name and name ~= "" then
+            return name
+        end
+    end
+
+    -- Cards
+    comps = EntityGetComponentIncludingDisabled(entity, "ItemActionComponent") or {}
+    for _, comp in ipairs(comps) do
+        local name = ComponentGetValue2(comp, "action_id")
+        if name and name ~= "" then
+            return name
+        end
+    end
+
+    print_error(("Failed to obtain lookup key for entity %d"):format(entity))
+    return nil
+end
+
 --[[ Get both the current and max health of the entity ]]
 function get_health(entity)
     local comps = EntityGetComponentIncludingDisabled(entity, "DamageModelComponent") or {}

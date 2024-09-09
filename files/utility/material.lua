@@ -171,6 +171,7 @@ function load_materials_xml()
 
     return {
         materials = cells,
+        materials_byname = cells_byname,
         reactions = reactions,
         req_reactions = req_reactions,
     }
@@ -182,6 +183,19 @@ function get_material_data()
         _material_cache = load_materials_xml()
     end
     return _material_cache
+end
+
+--[[ Get data about a material ]]
+function get_material_data_for(matid)
+    local mcache = get_material_data()
+    if mcache.materials_byname[matid] then
+        return mcache.materials_byname[matid]
+    end
+    for _, material in ipairs(mcache.materials) do
+        if material.name == matid then return material end
+        if material.ui_name == matid then return material end
+    end
+    return {}
 end
 
 --[[ True if the material matches the given condition ]]

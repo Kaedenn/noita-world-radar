@@ -89,6 +89,7 @@ files["files/panels/info.lua"] = {
     "item_get_name",
     "enemy_get_name",
     "get_name",
+    "entity_get_lookup_key",
     "get_health",
     "entity_match",
     "get_with_tags",
@@ -99,6 +100,7 @@ files["files/panels/info.lua"] = {
     "container_get_capacity",
     "material_get_icon",
     "generate_material_tables",
+    "get_material_data_for",
     -- "mods/world_radar/files/utility/spell.lua"
     "card_get_spell",
     "wand_get_spells",

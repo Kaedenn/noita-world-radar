@@ -38,7 +38,6 @@ function spell_is_always_cast(spell)
     end
     for _, icomp in ipairs(icomps) do
         local is_ac = ComponentGetValue2(icomp, "permanently_attached")
-        -- local ix, iy = ComponentGetValue2(icomp, "inventory_slot")
         if is_ac then return true end
     end
     return false

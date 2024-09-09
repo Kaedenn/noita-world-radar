@@ -240,6 +240,7 @@ function InfoPanel:_get_spell_by_name(sname)
     --  icon = 'data/ui_gfx/gun_actions/mana.png',
     --  config = {keep=1, ignore_ac=1}
     --}]]
+    if not sname or sname == "" then return {} end
     if sname:match("^%$") then sname = sname:gsub("^%$", "") end
     for _, entry in ipairs(self:_get_spell_list()) do
         if table_has_entry({entry.id, entry.name, entry.path}, sname) then
@@ -251,7 +252,6 @@ function InfoPanel:_get_spell_by_name(sname)
             }
         end
     end
-    --self.host:print_error(("Failed to find spell %s"):format(sname))
     return {}
 end
 
@@ -266,6 +266,7 @@ function InfoPanel:_get_material_by_name(mname)
     --  icon = "data/generated/material_icons/gold.png",
     --  tags = {"[alchemy]", "[corrodible]", "[earth]", "[gold]", ...}
     --}]]
+    if not mname or mname == "" then return {} end
     if self.env.material_cache and #self.env.material_cache > 0 then
         for _, entry in ipairs(self.env.material_cache) do
             if table_has_entry({entry.name, entry.path}, mname) then
@@ -275,7 +276,6 @@ function InfoPanel:_get_material_by_name(mname)
     else
         self.host:print_error("Material cache not ready before _get_material_by_name")
     end
-    --self.host:print_error(("Failed to find material %s"):format(mname))
     return {}
 end
 
@@ -291,12 +291,12 @@ function InfoPanel:_get_entity_by_name(ename)
     --
     --  data.effects[idx] = {frames=number, name=string}
     --}]]
+    if not ename or ename == "" then return {} end
     for _, entry in ipairs(self:_get_entity_list()) do
         if table_has_entry({entry.id, entry.name, entry.path}, ename) then
             return entry
         end
     end
-    --self.host:print_error(("Failed to find entity %s"):format(ename))
     return {}
 end
 
@@ -309,12 +309,15 @@ function InfoPanel:_get_item_by_name(iname)
     --  icon = "data/buildings_gfx/chest_random.png",
     --  tags = "teleportable_NOT,item_physics,chest,item_pickup,..."
     --}]]
+    if not iname or iname == "" then return {} end
     for _, entry in ipairs(self:_get_item_list()) do
         if table_has_entry({entry.id, entry.name, entry.path}, iname) then
-            return entry
+            -- Handle very specific overrides and false classifications
+            if entry.id ~= "mimic_potion" or iname ~= "$item_potion" then
+                return entry
+            end
         end
     end
-    --self.host:print_error(("Failed to find item %s"):format(iname))
     return {}
 end
 
@@ -403,7 +406,7 @@ function InfoPanel:_find_spells()
                 if not self.env.wand_matches[entid] then
                     self.env.wand_matches[entid] = {}
                 end
-                self.env.wand_matches[entid][spell] = true
+                self.env.wand_matches[entid][spell] = spell_id
             end
             ::continue::
         end
@@ -438,8 +441,7 @@ function InfoPanel:_find_containers()
             end
         end
         if #rare_mats > 0 then
-            local filename = EntityGetFilename(entity)
-            local iinfo = self:_get_item_by_name(filename)
+            local iinfo = self:_get_item_by_name(entity_get_lookup_key(entity))
             if not iinfo.id then
                 iinfo = self:_get_item_by_name("$item_powder_stash_3")
             end
@@ -851,6 +853,12 @@ end
 --[[ Create a function that draws the hover tooltip for a material ]]
 function InfoPanel:_make_material_tooltip_func(entry)
     return function(imgui, self_)
+        local function text_maybe(label, value)
+            if value then
+                imgui.Text(("%s: %s"):format(label, value))
+            end
+        end
+
         if not entry then return end
         local kind = entry.kind
         local matid = entry.id
@@ -858,6 +866,17 @@ function InfoPanel:_make_material_tooltip_func(entry)
         local matuiname = entry.uiname
         imgui.Text(("%s (ID: %s, type %s)"):format(matname, matid, kind))
         imgui.Text(("UI Name: %s"):format(matuiname))
+
+        local mdata = get_material_data_for(matname)
+        if mdata.name then
+            text_maybe("HP", mdata.hp)
+            text_maybe("Density", mdata.density)
+            text_maybe("Durability", mdata.durability)
+            if tostring(mdata.burnable) == "1" then
+                imgui.Text(("Burnable; burn health: %s"):format(mdata.fire_hp))
+            end
+        end
+
         imgui.Text(("Tags: %s"):format(table.concat(entry.tags, " ")))
     end
 end
@@ -1605,12 +1624,12 @@ function InfoPanel:_format_chest_reward(reward)
     rname = rname:gsub("%$[a-z0-9_]+", GameTextGet)
 
     local line = {}
-    if rtype == REWARD.WAND then -- TODO
+    if rtype == REWARD.WAND then
+        local wand_data = self:_get_item_by_name(rentity)
         table.insert(line, {
-            {"Wand"},
-            {
-                --image = wand_data.icon,
-                --fallback = "data/ui_gfx/icon_unkown.png",
+            {"Wand"}, {
+                image = wand_data.icon,
+                fallback = "data/items_gfx/machinegun.png",
                 color = "lightcyan",
                 ("%s [%s]"):format(rname, rentity)
             },
@@ -1624,12 +1643,9 @@ function InfoPanel:_format_chest_reward(reward)
                 local spell_name = GameTextGetTranslatedOrNot(spell_data.name)
                 name = ("%s [%s]"):format(spell_name, spell)
                 icon = spell_data.sprite
-            else
-                name = ("%s (unknown spell)")
             end
             table.insert(line, {
-                {"Spell"},
-                {
+                {"Spell"}, {
                     image = icon,
                     fallback = "data/ui_gfx/icon_unkown.png",
                     color = "lightcyan",
@@ -1641,22 +1657,33 @@ function InfoPanel:_format_chest_reward(reward)
     elseif rtype == REWARD.GOLD then
         local iinfo = self:_get_item_by_name("goldnugget")
         table.insert(line, {
-            {("%d"):format(ramount/10)},
-            {
+            {("%d"):format(ramount)}, {
                 image = iinfo.icon,
                 fallback = "data/ui_gfx/items/goldnugget.png",
                 color = "lightcyan",
-                GameTextGet("$item_goldnugget"),
+                hover = self:_make_item_tooltip_func(iinfo),
+                GameTextGet("$mat_gold"),
             },
-            {("(%d total gold)"):format(ramount)},
         })
     elseif rtype == REWARD.CONVERT then -- TODO
-        table.insert(line, ("Convert entity to %s"):format(rname))
+        local minfo = self:_get_material_by_name(rname)
+        local mname = GameTextGetTranslatedOrNot(rname)
+        if minfo.locname and minfo.name then
+            mname = ("%s (%s)"):format(minfo.locname, minfo.name)
+        end
+        table.insert(line, {
+            {"Convert to"}, {
+                image = minfo.icon,
+                fallback = "data/ui_gfx/icon_unkown.png",
+                color = "lightcyan",
+                hover = self:_make_material_tooltip_func(minfo),
+                mname,
+            },
+        })
     elseif rtype == REWARD.ITEM then
         local iinfo = self:_get_item_by_name(rentity)
         table.insert(line, {
-            {"Item"},
-            {
+            {"Item"}, {
                 image = iinfo.icon,
                 fallback = "data/ui_gfx/icon_unkown.png",
                 color = "lightcyan",
@@ -1666,8 +1693,7 @@ function InfoPanel:_format_chest_reward(reward)
     elseif rtype == REWARD.ENTITY then
         local einfo = self:_get_entity_by_name(rentity)
         table.insert(line, {
-            {"Entity"},
-            {
+            {"Entity"}, {
                 image = einfo.icon,
                 fallback = "data/ui_gfx/icon_unkown.png",
                 color = "lightcyan",
@@ -1681,18 +1707,16 @@ function InfoPanel:_format_chest_reward(reward)
         if minfo.locname and minfo.name then
             mname = ("%s (%s)"):format(minfo.locname, minfo.name)
         end
-        table.insert(line, {
-            {
-                image = iinfo.icon,
-                fallback = "data/ui_gfx/icon_unkown.png",
-                GameTextGetTranslatedOrNot(iinfo.name or "$item_potion"),
-            }, {
-                image = minfo.icon,
-                fallback = "data/ui_gfx/icon_unkown.png",
-                color = "lightcyan",
-                mname,
-            },
-        })
+        table.insert(line, {{
+            image = iinfo.icon,
+            fallback = "data/ui_gfx/icon_unkown.png",
+            GameTextGetTranslatedOrNot(iinfo.name or "$item_potion"),
+        }, {
+            image = minfo.icon,
+            fallback = "data/ui_gfx/icon_unkown.png",
+            color = "lightcyan",
+            mname,
+        }})
     elseif rtype == REWARD.REROLL then
         table.insert(line, {
             image = "data/ui_gfx/perk_icons/no_more_shuffle.png",
@@ -2344,8 +2368,7 @@ function InfoPanel:draw(imgui)
             local name = ("%s [%s]"):format(spell_name, spell)
             local entry = self:_get_spell_by_name(spell)
             self.host:p({
-                "Spell",
-                {
+                "Spell", {
                     image = spell_data.sprite,
                     fallback = "data/ui_gfx/icon_unkown.png",
                     hover = self:_make_spell_tooltip_func(entry),
@@ -2370,16 +2393,22 @@ function InfoPanel:draw(imgui)
                 self.host:p({separator_text="Found something!!", color="yellow"})
                 found_something = true
             end
+            local wand_info = self:_get_item_by_name(entity_get_lookup_key(entid))
+            local line = {{
+                image = wand_info.icon,
+                fallback = "data/items_gfx/machinegun.png",
+                hover = self:_make_item_tooltip_func(wand_info),
+                "Wand with",
+            }}
             local spell_list = {}
-            for spell, _ in pairs(ent_spells) do
-                if not spell then
-                    self.host:print_error(("Wand %d lacks spells"):format(entid))
-                    goto continue
-                end
+            for spell, spell_id in pairs(ent_spells) do
                 local spell_data = spell_get_data(spell)
                 local spell_name = GameTextGetTranslatedOrNot(spell_get_name(spell))
                 local entry = self:_get_spell_by_name(spell)
                 local name = ("%s [%s]"):format(spell_name, spell)
+                if spell_is_always_cast(spell_id) then
+                    name = "Always Cast " .. name
+                end
                 table.insert(spell_list, {
                     image = spell_data.sprite,
                     hover = self:_make_spell_tooltip_func(entry),
@@ -2387,12 +2416,9 @@ function InfoPanel:draw(imgui)
                     name,
                 })
             end
-            -- TODO: Add wand image?
-            self.host:p({
-                "Wand with",
-                spell_list,
-                "detected nearby!!",
-            })
+            table.insert(line, spell_list)
+            table.insert(line, "detected nearby!!")
+            self.host:p(line)
             local wx, wy = EntityGetTransform(entid)
             if wx ~= nil and wy ~= nil then
                 local pos_str = self:format_pos(wx, wy)
@@ -2428,14 +2454,15 @@ function InfoPanel:draw(imgui)
         self.host:p({separator_text="Items"})
         for _, entry in ipairs(aggregate(self:_get_nearby_items())) do
             local name, entities = unpack(entry)
-            local entfname = EntityGetFilename(entities[1])
-            local iinfo = self:_get_item_by_name(entfname)
+            local iinfo = self:_get_item_by_name(entity_get_lookup_key(entities[1]))
             local hover_fn = self:_make_item_tooltip_func(iinfo)
             if not iinfo.id then
+                local entid = entities[1]
                 hover_fn = function(imgui_, self_)
                     imgui_.TextDisabled("Not a known item")
                     imgui_.Text(name)
-                    imgui_.Text(("Path: %s"):format(entfname))
+                    imgui_.Text(("Path: %s"):format(EntityGetFilename(entid)))
+                    imgui_.Text(("Name: %s"):format(EntityGetName(entid)))
                 end
             end
 
@@ -2455,15 +2482,15 @@ function InfoPanel:draw(imgui)
             for _, entity in ipairs(entities) do
                 local ex, ey = EntityGetTransform(entity)
                 local contents = {}
-                local line = {
-                    {
-                        image = iinfo.icon,
-                        fallback = "data/ui_gfx/icon_unkown.png",
-                        color = "white",
-                        hover = hover_fn,
-                    },
-                    {name, color="lightcyan"}
-                }
+                local line = {{
+                    image = iinfo.icon,
+                    fallback = "data/ui_gfx/icon_unkown.png",
+                    color = "white",
+                    hover = hover_fn,
+                }, {
+                    color="lightcyan",
+                    name,
+                }}
                 if self.host.debugging then
                     table.insert(line, {
                         ("%d at %s"):format(entity, self:format_pos(ex, ey)),
@@ -2488,7 +2515,6 @@ function InfoPanel:draw(imgui)
                     }
                     self.host:p(line)
                 else
-                    -- TODO: Add material icons and hover to contents
                     local capacity = container_get_capacity(entity)
                     for matname, amount in pairs(container_get_contents(entity)) do
                         local percent = amount / capacity * 100
@@ -2517,15 +2543,17 @@ function InfoPanel:draw(imgui)
         self.host:p({separator_text="Enemies"})
         for _, entry in ipairs(aggregate(self:_get_nearby_enemies())) do
             local name, entities = unpack(entry)
-            local first_entity = entities[1]
-            local entfname = EntityGetFilename(first_entity)
-            local entinfo = self:_get_entity_by_name(entfname)
+            local entkey = entity_get_lookup_key(entities[1])
+            local entinfo = self:_get_entity_by_name(entkey)
             local hover_fn = self:_make_enemy_tooltip_func(entinfo)
             if not entinfo.id then
+                local entid = entities[1]
                 hover_fn = function(imgui_, self_)
                     imgui_.TextDisabled("Not a known entity")
                     imgui_.Text(name)
-                    imgui_.Text(("Path: %s"):format(entfname))
+                    imgui_.Text(("Key: %s"):format(entkey or "<unknown>"))
+                    imgui_.Text(("Path: %s"):format(EntityGetFilename(entid)))
+                    imgui_.Text(("Name: %s"):format(EntityGetName(entid)))
                 end
             end
             self.host:p({

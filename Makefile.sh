@@ -363,15 +363,15 @@ case "$ACTION" in
   cp) ;;
   diff) ;;
   diffw)
-    DIFF_LEFT="local";
-    DIFF_RIGHT="workshop";
-    DIFF_FROM="$SELF";
-    DIFF_TO="$(get_workshop_path "$SELF")";;
+    DIFF_LEFT="workshop";
+    DIFF_RIGHT="local";
+    DIFF_FROM="$(get_workshop_path "$SELF")";
+    DIFF_TO="$SELF";;
   diffd)
-    DIFF_LEFT="deployed";
-    DIFF_RIGHT="workshop";
-    DIFF_FROM="$DEST_DIR";
-    DIFF_TO="$(get_workshop_path "$SELF")";;
+    DIFF_LEFT="workshop";
+    DIFF_RIGHT="deployed";
+    DIFF_FROM="$(get_workshop_path "$SELF")";
+    DIFF_TO="$DEST_DIR";;
   *)
     error "Invalid action $ACTION";
     print_usage;

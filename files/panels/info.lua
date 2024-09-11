@@ -2407,7 +2407,7 @@ function InfoPanel:draw(imgui)
                 local entry = self:_get_spell_by_name(spell)
                 local name = ("%s [%s]"):format(spell_name, spell)
                 if spell_is_always_cast(spell_id) then
-                    name = "Always Cast " .. name
+                    table.insert(spell_list, "Always Cast")
                 end
                 table.insert(spell_list, {
                     image = spell_data.sprite,

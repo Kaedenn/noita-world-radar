@@ -47,6 +47,7 @@ end
 --]]
 
 -- FIXME: Potion rewards are incorrect
+-- EntityLoad(..., 1450.7, 1454.1) -> SetRandomSeed(1446.5, 1450.0)
 
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/gun/gun_enums.lua")
@@ -107,6 +108,8 @@ function chest_get_rewards(entity_id, do_debug)
     local fname = EntityGetFilename(entity_id)
     local rewards = {}
     if fname:match("chest_random_super") then
+        rand_x = seed_x
+        rand_y = seed_y
         SetRandomSeed(rand_x, rand_y)
         if do_debug then
             print(("Entity %d: {%f, %f} rand={%f, %f}"):format(

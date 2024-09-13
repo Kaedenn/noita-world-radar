@@ -65,6 +65,12 @@ function spell_get_name(spell)
     return action.name
 end
 
+--[[ Obtain the path to the spell icon image ]]
+function spell_get_icon(spell)
+    local action = spell_get_data(spell)
+    return action.sprite
+end
+
 --[[ Obtain the display name for the given action ]]
 function action_lookup(action)
     local action_types = {}

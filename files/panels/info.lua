@@ -7,18 +7,20 @@ TODO: Dynamically limit popup width to screen width
 
 TODO: Add I18N from shift_query to replace GameTextGet
 
-TODO: Add treasure chest drop scanning (wands, spells, containers)
+TODO: Add proper treasure chest drop scanning (wands, spells, containers)
+
+TODO: Refactor Gui* (_draw_onscreen_gui) code to its own module
+
+TODO: On-screen UI improvements:
+    Add icons to entities, items, and materials
+    Add icons to treasure chest prediction
+    Allow user to configure how the on-screen text is displayed
+        Configure anchoring: currently bottom-left, but add other three
+        Configure location
 
 TODO: Non-radar improvements:
     Only display the primary biome of a biome group
     Add "show triggers" (eg. temple collapse) via barrier spell effect
-
-TODO: Allow user to configure how the on-screen text is displayed
-    Configure anchoring: currently bottom-left, but add other three
-    Configure location
-
-TODO: Indicate Always Cast in "nearby spell" message
-    eg. "Wand with Always Cast Circle of Vigor detected nearby!!"
 
 IDEA: Add "include all unknown spells" button
 IDEA: Add "include all unkilled enemies" button
@@ -566,17 +568,61 @@ function InfoPanel:_draw_onscreen_gui()
 
     local padx, pady = self.config.gui.pad_left, self.config.gui.pad_bottom
     local linenr = 0
-    local function draw_text(line)
-        linenr = linenr + 1
+
+    -- Get the Y adjustment required to center the image on the line
+    local function center_vertical(image_height)
+        return (image_height - char_height) / 2
+    end
+
+    -- Draw text; returns right X coordinate
+    local function draw_text(text_arg, xpos)
+        local linex = xpos or padx
         local liney = screen_height - char_height * linenr - pady
-        if ui_show then
-            GuiText(gui, padx, liney, line)
+        local text = text_arg
+        if type(text_arg) == "table" then
+            text = text_arg[1]
+            if text_arg.color then
+                GuiColorSetForNextWidget(gui, unpack(text_arg.color))
+            end
+        end
+        GuiText(gui, linex, liney, text)
+        local textw, texth = GuiGetTextDimensions(gui, text)
+        return xpos + textw
+    end
+
+    local function draw_line(line)
+        if not ui_show then return end
+        linenr = linenr + 1
+        local linex = padx
+        local liney = screen_height - char_height * linenr - pady
+        local text = line
+        if type(line) == "table" then
+            text = line[1]
+            local images = {}
+            if line.image then
+                images = {line.image}
+            elseif line.images then
+                images = line.images
+            end
+            for _, image in ipairs(images) do
+                local imgw, imgh = GuiGetImageDimensions(gui, image)
+                if imgw and imgh then
+                    local imgy = liney - center_vertical(imgh)
+                    GuiImage(gui, next_id(), linex, imgy, image, 1, 1, 0)
+                    linex = linex + imgw + 2
+                end
+            end
+            for _, text_part in ipairs(line) do
+                linex = draw_text(text_part, linex)
+            end
+        else
+            GuiText(gui, linex, liney, text)
         end
     end
 
     local function draw_lines(lines)
         for idx=#lines, 1, -1 do
-            draw_text(lines[idx])
+            draw_line(lines[idx])
         end
     end
 
@@ -588,7 +634,12 @@ function InfoPanel:_draw_onscreen_gui()
 
     for _, entry in ipairs(aggregate(self:_find_enemies())) do
         local entname, entities = unpack(entry)
-        draw_text(("%dx %s detected nearby!!"):format(#entities, entname))
+        draw_line({
+            {("%dx "):format(#entities), color={1, 1, 0.5, 1}},
+            {entname, color={0.5, 1, 1, 1}},
+            " detected nearby!!",
+            -- TODO: determine and draw entity icon
+        })
         for _, entid in ipairs(entities) do
             draw_radar(entid, RADAR_KIND_ENTITY)
         end
@@ -601,30 +652,41 @@ function InfoPanel:_draw_onscreen_gui()
         for _, material in ipairs(entry.rare_contents) do
             table.insert(contents, GameTextGetTranslatedOrNot(material.uiname))
         end
-        draw_text(("%s with %s detected nearby!!"):format(
-            entry.name, table.concat(contents, ", ")))
+        draw_line({
+            {entry.name, color={0.5, 1, 1, 1}},
+            " with ",
+            {table.concat(contents, ", "), color={0.5, 1, 1, 1}},
+            " detected nearby!!",
+            -- TODO: draw container and material icons
+        })
         draw_radar(entry.entity, RADAR_KIND_MATERIAL)
     end
 
     for _, entry in ipairs(self:_find_items()) do
         if not found_item_ids[entry.entity] then
-            draw_text(("%s detected nearby!!"):format(entry.name))
+            draw_line({
+                {entry.name, color={0.5, 1, 1, 1}},
+                " detected nearby!!",
+            })
             draw_radar(entry.entity, RADAR_KIND_ITEM)
         end
     end
 
     for entid, ent_spells in pairs(self.env.wand_matches) do
         local spell_list = {}
+        local image_list = {}
         for spell_id, _ in pairs(ent_spells) do
             local spell_name = spell_get_name(spell_id)
-            if spell_name then
-                table.insert(spell_list, GameTextGetTranslatedOrNot(spell_name))
-            else
-                table.insert(spell_list, spell_name)
-            end
+            table.insert(spell_list, GameTextGetTranslatedOrNot(spell_name))
+            table.insert(image_list, spell_get_icon(spell_id) or "data/ui_gfx/icon_unkown.png")
         end
         local spells = table.concat(spell_list, ", ")
-        draw_text(("Wand with %s detected nearby!!"):format(spells))
+        draw_line({
+            "Wand with ",
+            {spells, color={0.5, 1, 1, 1}},
+            " detected nearby!!",
+            images=image_list,
+        })
         draw_radar(entid, RADAR_KIND_SPELL)
     end
 
@@ -632,7 +694,12 @@ function InfoPanel:_draw_onscreen_gui()
         local spell = card_get_spell(entid)
         local spell_name = spell_get_name(spell) or spell
         spell_name = GameTextGetTranslatedOrNot(spell_name)
-        draw_text(("Spell %s detected nearby!!"):format(spell_name))
+        draw_line({
+            "Spell ",
+            {spell_name, color={0.5, 1, 1, 1}},
+            " detected nearby!!",
+            image=spell_get_icon(spell) or "data/ui_gfx/icon_unkown.png",
+        })
         draw_radar(entid, RADAR_KIND_SPELL)
     end
 
@@ -1665,7 +1732,7 @@ function InfoPanel:_format_chest_reward(reward)
                 GameTextGet("$mat_gold"),
             },
         })
-    elseif rtype == REWARD.CONVERT then -- TODO
+    elseif rtype == REWARD.CONVERT then
         local minfo = self:_get_material_by_name(rname)
         local mname = GameTextGetTranslatedOrNot(rname)
         if minfo.locname and minfo.name then
@@ -1722,7 +1789,7 @@ function InfoPanel:_format_chest_reward(reward)
             image = "data/ui_gfx/perk_icons/no_more_shuffle.png",
             ("Reroll x%d"):format(ramount)
         })
-    elseif rtype == REWARD.POTIONS then -- TODO: Display each potion type with material
+    elseif rtype == REWARD.POTIONS then
         local iinfo = self:_get_item_by_name("potion")
         table.insert(line, {
             image = iinfo.icon,

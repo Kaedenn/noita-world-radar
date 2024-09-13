@@ -105,8 +105,9 @@ files["files/panels/info.lua"] = {
     "card_get_spell",
     "wand_get_spells",
     "spell_is_always_cast",
-    "spell_get_name",
     "spell_get_data",
+    "spell_get_name",
+    "spell_get_icon",
     "action_lookup",
     -- "mods/world_radar/files/utility/treasure_chest.lua"
     "entity_is_chest",

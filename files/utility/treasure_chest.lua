@@ -46,9 +46,6 @@ end
 
 --]]
 
--- FIXME: Potion rewards are incorrect
--- EntityLoad(..., 1450.7, 1454.1) -> SetRandomSeed(1446.5, 1450.0)
-
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/gun/gun_enums.lua")
 dofile_once("data/scripts/gun/gun_actions.lua")
@@ -142,8 +139,8 @@ function chest_get_rewards(entity_id, do_debug)
     end
 
     -- Expand potion rewards
-    local rx = rand_x - 4.5 -- TODO: Figure out why this happens
-    local ry = rand_y - 4
+    local rx = rand_x - 4.2 -- TODO: Figure out why this happens
+    local ry = rand_y - 4.1
     for _, reward in ipairs(rewards) do
         if reward.type == REWARD.POTION or reward.type == REWARD.POUCH then
             reward.content = do_potion_get_contents(rx, ry, reward.entity, do_debug)
@@ -761,7 +758,7 @@ function do_potion_get_contents(rand_x, rand_y, potion_filename, do_debug)
     elseif potion_filename == CONTAINER.POTION_SECRET then
         dofile("data/scripts/items/potion_secret.lua")
         -- luacheck: globals potions
-        material = random_from_array(potions)
+        material = random_from_array(potions).material
     elseif potion_filename == CONTAINER.POTION_RANDOM then
         local materials = nil
         if Random(0, 100) <= 50 then
@@ -769,7 +766,7 @@ function do_potion_get_contents(rand_x, rand_y, potion_filename, do_debug)
         else
             materials = CellFactory_GetAllSands(false)
         end
-        material = random_from_array(materials)
+        material = random_from_array(materials).material
     else
         print_error(("At {%.2f,%.2f}: invalid potion %q"):format(
             rand_x, rand_y, potion_filename))

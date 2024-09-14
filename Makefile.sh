@@ -363,11 +363,13 @@ case "$ACTION" in
   cp) ;;
   diff) ;;
   diffw)
+    DIFF_ARGS+=(-x "*.py");
     DIFF_LEFT="workshop";
     DIFF_RIGHT="local";
     DIFF_FROM="$(get_workshop_path "$SELF")";
     DIFF_TO="$SELF";;
   diffd)
+    DIFF_ARGS+=(-x "*.py");
     DIFF_LEFT="workshop";
     DIFF_RIGHT="deployed";
     DIFF_FROM="$(get_workshop_path "$SELF")";

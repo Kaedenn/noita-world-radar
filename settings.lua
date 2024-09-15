@@ -110,6 +110,13 @@ mod_settings = {
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
             {
+                id = "chest_prediction",
+                ui_name = "Treasure Chest Prediction",
+                ui_description = "Predict chest contents when standing next to a treasure chest.",
+                value_default = true,
+                scope = MOD_SETTING_SCOPE_RUNTIME,
+            },
+            {
                 id = "radar_distance",
                 ui_name = "Radar Sprite Distance",
                 ui_description = "How far away from the player are the radar icons drawn? (perks use 20, default is 40).",

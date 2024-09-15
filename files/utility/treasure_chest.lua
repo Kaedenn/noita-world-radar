@@ -9,6 +9,7 @@
 --  entity:string           Path to the new entity xml (or nil)
 --  amount:number           Amount of this type dropped (or nil)
 --  entities:{string...}?   Table of new entity xmls
+--  image:string            Optional image path
 --
 -- Special additional keys for certain reward types:
 --  content="material_name"         when type="potion"
@@ -513,11 +514,12 @@ function do_utility_box_get_rewards(x, y, entity_id, rand_x, rand_y)
         count = count - 1
         local rnd = Random(1, 100)
 
-        local reward = {type=nil, name=nil, entity=nil, amount=nil}
+        local reward = {type=nil, name=nil, entity=nil, amount=nil, image=nil}
         if rnd <= 2 then -- Bomb
             reward.type = "entity"
             reward.name = "$action_bomb"
             reward.entity = "data/entities/projectiles/bomb_small.xml"
+            reward.image = "data/items_gfx/bomb.png"
         elseif rnd <= 5 then -- Spell refresh (or mimic)
             rnd = Random(0, 100)
             if rnd <= 98 then
@@ -702,7 +704,7 @@ function do_potion_get_contents(rand_x, rand_y, potion_filename, do_debug)
         -- luacheck: globals materials_standard materials_magic
         material = "water"
 
-        if Random(0, 100) <= 75 then
+        if Random(0, 100) <= 75 then -- 75% chance of magic material
             if Random(0, 100000) <= 50 then -- 0.05% chance of Healthium
                 material = "magic_liquid_hp_regeneration"
             elseif Random(200, 100000) <= 250 then
@@ -713,7 +715,7 @@ function do_potion_get_contents(rand_x, rand_y, potion_filename, do_debug)
                 local potion_material = random_from_array(materials_magic)
                 material = potion_material.material
             end
-        else
+        else -- 25% chance of standard material
             local potion_material = random_from_array(materials_standard)
             material = potion_material.material
         end
@@ -776,52 +778,66 @@ function do_potion_get_contents(rand_x, rand_y, potion_filename, do_debug)
 end
 
 --[[ Format rewards as a table of lines ]]
-function format_rewards(rewards)
-    local text = {}
-    for idx, reward in ipairs(rewards) do
+function format_rewards(rewards, highlight_color)
+    local lines = {}
+    for _, reward in ipairs(rewards) do
         local rtype = reward.type
         local rname = reward.name or ""
+        local ramount = reward.amount or 0
         local rentity = reward.entity or ""
         local rentities = reward.entities or {}
-        local ramount = reward.amount or 0
+        local rimage = reward.image or nil
         local name = rname:gsub("%$[a-z_]+", GameTextGetTranslatedOrNot)
         if name and name ~= "" then
             rname = name
         end
 
         local line = ""
+        local line_data = {""}
         if rtype == REWARD.WAND then
+            -- TODO: Image
             line = ("Wand: %s [%s]"):format(rname, rentity)
         elseif rtype == REWARD.CARD then
-            for sidx, spell in ipairs(rentities) do
-                line = ("Spell: %s"):format(spell)
-            end
+            -- TODO: Images
+            line = (#rentities == 1 and "Spell" or "Spells") .. ":"
+            line = line .. " " .. table.concat(rentities, ", ")
         elseif rtype == REWARD.GOLD then
+            -- TODO: Image
             line = ("%d %s"):format(ramount, rname)
         elseif rtype == REWARD.CONVERT then
+            -- TODO: Image
             line = ("Convert entity to %s"):format(rname)
         elseif rtype == REWARD.ITEM then
+            -- TODO: Image
             line = ("Item: %s [%s]"):format(rname, rentity)
         elseif rtype == REWARD.ENTITY then
+            -- TODO: Image
             line = ("Entity: %s [%s]"):format(rname, rentity)
         elseif rtype == REWARD.POTION then
+            -- TODO: Image
             line = ("Potion: %s [%s]"):format(reward.content, rentity)
         elseif rtype == REWARD.POUCH then
+            -- TODO: Image
             line = ("Pouch: %s [%s]"):format(rname, rentity)
         elseif rtype == REWARD.REROLL then
+            line_data.image = "data/ui_gfx/perk_icons/no_more_shuffle.png"
             line = ("Reroll %dx"):format(ramount)
         elseif rtype == REWARD.POTIONS then
+            -- TODO: Image
             line = ("Potions: %s"):format(table.concat(reward.contents, ", "))
         elseif rtype == REWARD.GOLDRAIN then
+            -- TODO: Image
             line = "Gold rain"
         elseif rtype == REWARD.SAMPO then
+            -- TODO: Image
             line = "The Sampo"
         else
             line = ("Invalid reward %s"):format(rtype)
         end
-        table.insert(text, line)
+        line_data[1] = line
+        table.insert(lines, line_data)
     end
-    return text
+    return lines
 end
 
 -- vim: set ts=4 sts=4 sw=4:

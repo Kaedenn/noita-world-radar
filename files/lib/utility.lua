@@ -91,6 +91,16 @@ function first_of(tbl)
     return nil
 end
 
+--[[ Has the player obtained the spell before? ]]
+function stats_check_spell(spell_id)
+    return HasFlagPersistent("action_" .. string.lower(spell_id))
+end
+
+--[[ Has the player killed the entity before? (TODO) ]]
+function stats_check_kill(enemy_id)
+    return true
+end
+
 --[[ Generate a traceback (HACK) ]]
 function generate_traceback()
     print_error("Generating traceback via SetPlayerSpawnLocation()...")

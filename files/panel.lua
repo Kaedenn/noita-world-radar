@@ -602,6 +602,14 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
             else
                 ret = imgui.Button(blabel)
             end
+            if line.button.hover then
+                if imgui.IsItemHovered() then
+                    if imgui.BeginTooltip() then
+                        self:draw_line(imgui, line.button.hover, show_images, show_color, line.button)
+                        imgui.EndTooltip()
+                    end
+                end
+            end
             imgui.SameLine()
 
             if ret then

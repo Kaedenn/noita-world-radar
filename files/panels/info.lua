@@ -3,6 +3,10 @@ The "Info" Panel: Display interesting information
 
 FIXME: This file is huge
 
+TODO: Allow mods to add custom enemies and items
+
+TODO: Remove self.config.range, range_rule in lieu of conf_get
+
 TODO: Dynamically limit popup width to screen width
 
 TODO: Add I18N from shift_query to replace GameTextGet
@@ -10,6 +14,8 @@ TODO: Add I18N from shift_query to replace GameTextGet
 TODO: Add proper treasure chest drop scanning (wands, spells, containers)
 
 TODO: Refactor Gui* (_draw_onscreen_gui) code to its own module
+    Add draw functions to Panel base class
+    Handle identical structure to Panel:p
 
 TODO: On-screen UI improvements:
     Add icons to entities, items, and materials
@@ -80,7 +86,6 @@ InfoPanel = {
         range_rule = "infinite",            -- Range of the radar, override
         near_range = 20,                    -- Extra scan max range
         rare_biome_mod = 0.2,               -- Chances below this are rare
-        show_images = true,                 -- Master image toggle
         rare_spells = {                     -- Default rare spell list
             {"MANA_REDUCE", keep=1},        -- Add Mana
             {"REGENERATION_FIELD", keep=0}, -- Circle of Vigour
@@ -581,7 +586,7 @@ function InfoPanel:_draw_onscreen_gui()
         local text = text_arg
         if type(text_arg) == "table" then
             text = text_arg[1]
-            if text_arg.color then
+            if text_arg.color and conf_get(CONF.SHOW_COLOR) then
                 GuiColorSetForNextWidget(gui, unpack(text_arg.color))
             end
         end
@@ -599,10 +604,12 @@ function InfoPanel:_draw_onscreen_gui()
         if type(line) == "table" then
             text = line[1]
             local images = {}
-            if line.image then
-                images = {line.image}
-            elseif line.images then
-                images = line.images
+            if conf_get(CONF.SHOW_IMAGES) then
+                if line.image then
+                    images = {line.image}
+                elseif line.images then
+                    images = line.images
+                end
             end
             for _, image in ipairs(images) do
                 local imgw, imgh = GuiGetImageDimensions(gui, image)
@@ -677,8 +684,12 @@ function InfoPanel:_draw_onscreen_gui()
         local image_list = {}
         for spell_id, _ in pairs(ent_spells) do
             local spell_name = spell_get_name(spell_id)
-            table.insert(spell_list, GameTextGetTranslatedOrNot(spell_name))
-            table.insert(image_list, spell_get_icon(spell_id) or "data/ui_gfx/icon_unkown.png")
+            local loc_name = GameTextGetTranslatedOrNot(spell_name)
+            if spell_is_always_cast(spell_id) then
+                loc_name = GameTextGet("$perk_always_cast") .. " " .. loc_name
+            end
+            table.insert(spell_list, loc_name)
+            table.insert(image_list, spell_get_icon(spell_id, "data/ui_gfx/icon_unkown.png"))
         end
         local spells = table.concat(spell_list, ", ")
         draw_line({
@@ -698,21 +709,22 @@ function InfoPanel:_draw_onscreen_gui()
             "Spell ",
             {spell_name, color={0.5, 1, 1, 1}},
             " detected nearby!!",
-            image=spell_get_icon(spell) or "data/ui_gfx/icon_unkown.png",
+            image=spell_get_icon(spell, "data/ui_gfx/icon_unkown.png"),
         })
         draw_radar(entid, RADAR_KIND_SPELL)
     end
 
-    local px, py = EntityGetTransform(get_players()[1])
-    if px and py then
-        for _, tag_name in ipairs({"chest", "utility_box"}) do
-            local r = self.config.near_range
-            for _, chest_id in ipairs(EntityGetInRadiusWithTag(px, py, r, tag_name)) do
-                local lines = {"Treasure chest should drop..."}
-                local reward_list = chest_get_rewards(chest_id, self.env.debug.on)
-                local rewards = format_rewards(reward_list)
-                table_extend(lines, rewards)
-                draw_lines(lines)
+    if conf_get(CONF.CHEST_PREDICTION) then
+        local px, py = EntityGetTransform(get_players()[1])
+        if px and py then
+            for _, tag in ipairs({"chest", "utility_box"}) do
+                local r = self.config.near_range
+                for _, chest_id in ipairs(EntityGetInRadiusWithTag(px, py, r, tag)) do
+                    local lines = {"Treasure chest should drop..."}
+                    local reward_list = chest_get_rewards(chest_id, self.env.debug.on)
+                    table_extend(lines, format_rewards(reward_list))
+                    draw_lines(lines)
+                end
             end
         end
     end
@@ -1076,7 +1088,7 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                     table.insert(self.env.spell_list, entry)
                 end
                 imgui.SameLine()
-                if entry.icon and self.config.show_images then
+                if entry.icon and conf_get(CONF.SHOW_IMAGES) then
                     self.host:draw_image(imgui, entry.icon, true)
                     self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
                     imgui.SameLine()
@@ -1124,7 +1136,7 @@ function InfoPanel:_draw_spell_list(imgui)
         }, NOWRAP)
         imgui.SameLine()
         local hover_func = self:_make_spell_tooltip_func(entry)
-        if entry.icon and self.config.show_images then
+        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
             self.host:draw_image(imgui, entry.icon, true)
             self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
             imgui.SameLine()
@@ -1230,7 +1242,7 @@ function InfoPanel:_draw_material_dropdown(imgui)
             end
             imgui.SameLine()
             local hover_tooltip_func = self:_make_material_tooltip_func(entry)
-            if maticon and self.config.show_images then
+            if maticon and conf_get(CONF.SHOW_IMAGES) then
                 self.host:draw_image(imgui, maticon, true)
                 self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
                 imgui.SameLine()
@@ -1261,7 +1273,7 @@ function InfoPanel:_draw_material_list(imgui)
         self:_draw_hover_tooltip(imgui, "If checked, do not remove this material upon pickup")
         imgui.SameLine()
         local hover_tooltip_func = self:_make_material_tooltip_func(entry)
-        if entry.icon and self.config.show_images then
+        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
             self.host:draw_image(imgui, entry.icon, true)
             self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
             imgui.SameLine()
@@ -1331,7 +1343,7 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                 end
                 imgui.SameLine()
                 local hover_fn = self:_make_enemy_tooltip_func(entry)
-                if self.config.show_images then
+                if conf_get(CONF.SHOW_IMAGES) then
                     self.host:draw_image(imgui, entry.icon, true, {
                         fallback="data/ui_gfx/icon_unkown.png"
                     })
@@ -1356,7 +1368,7 @@ function InfoPanel:_draw_entity_list(imgui)
         end
         imgui.SameLine()
         local hover_fn = self:_make_enemy_tooltip_func(entry)
-        if entry.icon and self.config.show_images then
+        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
             self.host:draw_image(imgui, entry.icon, true, {
                 fallback="data/ui_gfx/icon_unkown.png"
             })
@@ -1432,7 +1444,7 @@ function InfoPanel:_draw_item_dropdown(imgui)
                     })
                 end
                 imgui.SameLine()
-                if entry.icon and self.config.show_images then
+                if entry.icon and conf_get(CONF.SHOW_IMAGES) then
                     self.host:draw_image(imgui, entry.icon, true, {
                         fallback="data/ui_gfx/icon_unkown.png"
                     })
@@ -1464,7 +1476,7 @@ function InfoPanel:_draw_item_list(imgui)
         self:_draw_hover_tooltip(imgui, "If checked, do not remove this item upon pickup")
         imgui.SameLine()
         local hover_func = self:_make_item_tooltip_func(entry)
-        if entry.icon and self.config.show_images then
+        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
             self.host:draw_image(imgui, entry.icon, true, {
                 fallback="data/ui_gfx/icon_unkown.png"
             })
@@ -1491,6 +1503,14 @@ function InfoPanel:_player_has_spell(spell_or_spell_id)
         local entid, entname = unpack(entpair)
         local spell = card_get_spell(entid)
         if spell == spell_id then
+            local ac_flag = spell_is_always_cast(entid)
+            if type(spell_or_spell_id) == "table" then
+                local info = spell_or_spell_id
+                if info.config and info.config.ignore_ac then
+                    local matches = _want_ac_spell(info.config.ignore_ac, ac_flag)
+                    return matches
+                end
+            end
             return true
         end
     end
@@ -2143,13 +2163,19 @@ end
 
 --[[ Public: draw the menu bar ]]
 function InfoPanel:draw_menu(imgui)
+    local prefix
     if imgui.BeginMenu(self.name) then
-        if imgui.MenuItem("Toggle Checkboxes") then
+        prefix = self.env.show_checkboxes and "Hide" or "Show"
+        if imgui.MenuItem(prefix .. " Checkboxes") then
             self.env.show_checkboxes = not self.env.show_checkboxes
         end
-        if imgui.MenuItem("Toggle Images") then
-            self.config.show_images = not self.config.show_images
-            conf_set(CONF.SHOW_IMAGES, self.config.show_images)
+        prefix = conf_get(CONF.SHOW_IMAGES) and "Hide" or "Show"
+        if imgui.MenuItem(prefix .. " Images") then
+            conf_toggle(CONF.SHOW_IMAGES)
+        end
+        prefix = conf_get(CONF.CHEST_PREDICTION) and "Disable" or "Enable"
+        if imgui.MenuItem(prefix .. " Chest Prediction") then
+            conf_toggle(CONF.CHEST_PREDICTION)
         end
         imgui.SeparatorText("Pickup Actions")
         local items = {
@@ -2160,16 +2186,16 @@ function InfoPanel:draw_menu(imgui)
         for _, entry in ipairs(items) do
             local label, conf = unpack(entry)
             local curr = conf_get(conf)
-            local prefix = curr and "Disable" or "Enable"
+            prefix = curr and "Disable" or "Enable"
             local text = ("%s Remove %s on Pickup"):format(prefix, label)
             if imgui.MenuItem(text) then
-                conf_set(conf, not curr)
+                conf_toggle(conf)
             end
         end
         imgui.SeparatorText("Orb Radar")
-        local prefix = conf_get(CONF.ORB_ENABLE) and "Disable" or "Enable"
+        prefix = conf_get(CONF.ORB_ENABLE) and "Disable" or "Enable"
         if imgui.MenuItem(prefix .. " Orb Radar") then
-            conf_set(CONF.ORB_ENABLE, not conf_get(CONF.ORB_ENABLE))
+            conf_toggle(CONF.ORB_ENABLE)
         end
         if imgui.BeginMenu("Orb Selection") then
             local curr = conf_get(CONF.ORB_LIMIT)
@@ -2293,7 +2319,6 @@ function InfoPanel:draw(imgui)
     self.config.range = tonumber(conf_get(CONF.RADAR_RANGE_MANUAL))
 
     self.host:text_clear()
-    self.config.show_images = conf_get(CONF.SHOW_IMAGES) or false
 
     self:_process_remove_entries()
 
@@ -2305,25 +2330,21 @@ function InfoPanel:draw(imgui)
 
     if self.env.manage_spells then
         self:_draw_spell_dropdown(imgui)
-        imgui.Separator()
         self:_draw_spell_list(imgui)
     end
 
     if self.env.manage_materials then
         self:_draw_material_dropdown(imgui)
-        imgui.Separator()
         self:_draw_material_list(imgui)
     end
 
     if self.env.manage_entities then
         self:_draw_entity_dropdown(imgui)
-        imgui.Separator()
         self:_draw_entity_list(imgui)
     end
 
     if self.env.manage_items then
         self:_draw_item_dropdown(imgui)
-        imgui.Separator()
         self:_draw_item_list(imgui)
     end
 
@@ -2474,7 +2495,7 @@ function InfoPanel:draw(imgui)
                 local entry = self:_get_spell_by_name(spell)
                 local name = ("%s [%s]"):format(spell_name, spell)
                 if spell_is_always_cast(spell_id) then
-                    table.insert(spell_list, "Always Cast")
+                    table.insert(spell_list, GameTextGet("$perk_always_cast"))
                 end
                 table.insert(spell_list, {
                     image = spell_data.sprite,
@@ -2564,6 +2585,7 @@ function InfoPanel:draw(imgui)
                         color = self.host.colors.debug
                     })
                 end
+                local is_container = EntityHasTag(entity, "potion") or EntityHasTag(entity, "powder_stash")
                 -- TODO: Make this available to the search functions
                 if entity_is_chest(entity) then
                     line[1].button = {
@@ -2577,11 +2599,12 @@ function InfoPanel:draw(imgui)
                             end
                         end,
                         small = true,
+                        hover = "Peek inside the Treasure Chest without opening it",
                         self,
                         entity,
                     }
                     self.host:p(line)
-                else
+                elseif is_container then
                     local capacity = container_get_capacity(entity)
                     for matname, amount in pairs(container_get_contents(entity)) do
                         local percent = amount / capacity * 100
@@ -2597,7 +2620,7 @@ function InfoPanel:draw(imgui)
                     if #contents > 0 then
                         table.insert(line, "with")
                         table.insert(line, contents)
-                    elseif EntityHasTag(entity, "potion") then
+                    else
                         table.insert(line, "empty")
                     end
                     self.host:d(line)
@@ -2628,6 +2651,7 @@ function InfoPanel:draw(imgui)
                     image = entinfo.icon,
                     hover = hover_fn,
                     fallback = "data/ui_gfx/icon_unkown.png",
+                    color = "white", -- TODO: stats_check_kill(entity_name)
                     name,
                 }
             })

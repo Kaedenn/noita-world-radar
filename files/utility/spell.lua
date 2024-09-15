@@ -66,9 +66,9 @@ function spell_get_name(spell)
 end
 
 --[[ Obtain the path to the spell icon image ]]
-function spell_get_icon(spell)
+function spell_get_icon(spell, fallback)
     local action = spell_get_data(spell)
-    return action.sprite
+    return action.sprite or fallback
 end
 
 --[[ Obtain the display name for the given action ]]

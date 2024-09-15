@@ -77,6 +77,7 @@ files["files/panels/info.lua"] = {
     "CONF",
     "conf_get",
     "conf_set",
+    "conf_toggle",
     -- "mods/world_radar/files/utility/biome.lua"
     "get_biome_data",
     "biome_is_default",

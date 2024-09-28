@@ -32,6 +32,8 @@
 -- Panels are allowed to have whatever else they desire in their panel table.
 --]]
 
+-- TODO: onscreen text: add instance list like Panel.lines
+
 --[[ Line Format
 The Panel class supports fairly complex layout for printing lines using the
 Panel:p() and Panel:d() functions. A line is either a string or a table of
@@ -93,6 +95,7 @@ Panel = {
     initialized = false,
     id_current = nil,   -- ID of the "current" panel
     PANELS = {},        -- Table of panel IDs to panel instances
+    gui = nil,          -- Noita Gui instance
 
     debugging = false,  -- true if debugging is active/enabled
     lines = {},         -- lines displayed below the panel
@@ -221,6 +224,7 @@ function Panel:init(env, config)
         self.id_current = curr_panel
     end
 
+    if not self.gui then self.gui = GuiCreate() end
     self.initialized = true
 end
 
@@ -583,6 +587,7 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
         end
 
         if (line.image or line.fallback) and show_images then
+            -- FIXME: Draw fallback if drawing line.image fails
             self:draw_image(imgui, line.image or line.fallback, true, line)
             imgui.SameLine()
         end
@@ -674,6 +679,155 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
         -- It's neither a table nor a string?
         imgui.Text(tostring(line))
     end
+end
+
+--[[ Draw a line to the screen. Supports most Panel:draw_line features.
+--
+-- curr_x and curr_y support a few different behaviors:
+--  if curr_x is nil, curr_x = 2 * char_width
+--  if curr_y is nil, curr_y = screen_height - 2 * char_height
+--  if curr_y < 0, curr_y = screen_height - math.abs(curr_y) * char_height
+--
+-- This function returns two values:
+--  curr_x + width of line in pixels
+--  curr_y + height of line in pixels
+--
+-- Features not supported:
+--  self.separator
+--  line.level (support is planned; color works)
+--  line.label (support is planned)
+--  line.clear_line (support is tentatively planned)
+--  line.wrapped, line.wrapped_text (support is planned)
+--  line.as_separator, line.separator_text
+--  line.as_label, line.label_text
+--  line.as_bullet, line.bullet_text
+--  line.disabled
+--]]
+function Panel:draw_line_onscreen(line, pos, show_images, show_color, data, extra)
+    local id = extra and extra.id or 0
+    local function next_id() id = id + 1; return id end
+    if show_images == nil then show_images = conf_get(CONF.SHOW_IMAGES) end
+    if show_color == nil then show_color = conf_get(CONF.SHOW_COLOR) end
+    GuiStartFrame(self.gui)
+    local screen_width, screen_height = GuiGetScreenDimensions(self.gui)
+    local char_width, char_height = GuiGetTextDimensions(self.gui, "M")
+    if not data then GuiIdPushString(self.gui, MOD_ID .. "_panel_onscreen") end
+
+    local curr_x, curr_y = unpack(pos or {nil, nil})
+    if not curr_x then curr_x = char_width * 2 end
+    if not curr_y then
+        curr_y = screen_height - char_height * 2
+    elseif curr_y < 0 then
+        curr_y = screen_height - char_height * math.abs(curr_y)
+    end
+
+    local base_pos = extra and extra.base_pos or {curr_x, curr_y}
+    if type(line) == "table" then
+        local level = line.level or nil
+        local color = line.color or nil
+        if color == nil and level ~= nil then
+            color = self.colors[level] or nil
+        end
+        if type(color) == "string" then
+            color = self.colors.names[color] or {1, 1, 1, 1}
+        end
+
+        if line.duration and line.max_duration then
+            local ratio = line.duration / line.max_duration
+            local percent = math.floor(ratio * 100)
+            local prefix = ("%02d:"):format(math.min(percent, 99))
+            local clicked = GuiButton(self.gui, next_id(), curr_x, curr_y, prefix)
+            if clicked then
+                line.duration = 0
+            end
+            local textw, texth = GuiGetTextDimensions(self.gui, prefix)
+            curr_x = curr_x + textw + char_width
+        end
+
+        if (line.image or line.fallback) and show_images then
+            local image_path = line.image
+            local img_width, img_height = GuiGetImageDimensions(self.gui, image_path)
+            if img_width == 0 and img_height == 0 then
+                image_path = line.fallback
+                img_width, img_height = GuiGetImageDimensions(self.gui, image_path)
+            end
+            if img_width ~= 0 and img_height ~= 0 then
+                GuiImage(self.gui, next_id(), curr_x, curr_y, image_path, 1, 1)
+                curr_x = curr_x + img_width + char_width
+            end
+        end
+
+        if line.button then
+            local btext = line.button.text or "Button"
+            local bid = line.button.id or ""
+            local bfunc = line.button.func or function() end
+            local bfunc_right = line.button.func_right or function() end
+            local blabel = btext
+            if bid ~= "" then
+                GuiIdPushString(self.gui, ("%s_%s"):format(btext, bid))
+            end
+            local clicked, right_clicked = GuiButton(self.gui, next_id(), curr_x, curr_y, btext)
+            if clicked then
+                local bargs = {unpack(line.button)}
+                table.insert(bargs, self)
+                local result, value = pcall(bfunc, unpack(bargs))
+                if not result then
+                    self:print_error(("ERROR: %s"):format(value))
+                end
+            end
+            if right_clicked then
+                local bargs = {unpack(line.button)}
+                table.insert(bargs, self)
+                local result, value = pcall(bfunc_right, unpack(bargs))
+                if not result then
+                    self:print_error(("ERROR: %s"):format(value))
+                end
+            end
+            local textw, texth = GuiGetTextDimensions(self.gui, line)
+            curr_x = curr_x + textw + char_width
+            if bid ~= "" then
+                GuiIdPop(self.gui)
+            end
+        end
+
+        local temp_y = curr_y
+        for _, token in ipairs(line) do
+            curr_x, temp_y = self:draw_line_onscreen(
+                token,
+                {curr_x, curr_y},
+                show_images,
+                show_color,
+                line,
+                {id=id, color=color, base_pos=base_pos})
+            temp_y = math.max(curr_y, temp_y)
+        end
+        curr_y = temp_y
+
+    elseif type(line) == "string" then
+        if show_color then
+            local color = nil
+            if extra and extra.color then
+                color = extra.color
+            elseif data and data.color then
+                color = data.color
+            end
+            if type(color) == "string" then
+                color = self.colors.names[color]
+            end
+            if color then
+                local tr, tg, tb, ta = unpack(color)
+                if not ta then ta = 1 end
+                GuiColorSetForNextWidget(self.gui, tr, tg, tb, ta)
+            end
+        end
+        GuiText(self.gui, curr_x, curr_y, line)
+        local textw, texth = GuiGetTextDimensions(self.gui, line)
+        curr_x = curr_x + textw
+        curr_y = curr_y + texth
+    end
+    if not data then GuiIdPop(self.gui) end
+
+    return curr_x, curr_y
 end
 
 --[[ Join together a line of text into a single string ]]

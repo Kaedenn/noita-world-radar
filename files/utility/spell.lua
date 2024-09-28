@@ -1,10 +1,35 @@
 --[[
--- Spell-and-wand-related helper functions
+-- Spell and wand helper functions
 --]]
 
 dofile_once("data/scripts/gun/gun_enums.lua")
 
+local spell_list = nil
 local spell_cache = nil
+
+--[[ Refresh the caches ]]
+local function _refresh_spell_cache()
+    spell_list = {}
+    spell_cache = {}
+    dofile_once("data/scripts/gun/gun_actions.lua")
+    -- luacheck: globals actions
+    for _, entry in ipairs(actions) do
+        table.insert(spell_list, entry)
+        spell_cache[entry.id] = entry
+    end
+end
+
+--[[ Get the actions table ]]
+function get_spell_list()
+    if not spell_list then _refresh_spell_cache() end
+    return spell_list
+end
+
+--[[ Get the actions table, accessible by spell ID ]]
+function get_spell_table()
+    if not spell_cache then _refresh_spell_cache() end
+    return spell_cache
+end
 
 --[[ Get the spell for the given card ]]
 function card_get_spell(card)
@@ -45,16 +70,9 @@ end
 
 --[[ Obtain the spell table for the given spell ID ]]
 function spell_get_data(spell)
-    if not spell_cache then
-        spell_cache = {}
-        dofile_once("data/scripts/gun/gun_actions.lua")
-        -- luacheck: globals actions
-        for _, entry in ipairs(actions) do
-            spell_cache[entry.id] = entry
-        end
-    end
-    if spell and spell_cache[spell] then
-        return spell_cache[spell]
+    local spells = get_spell_table()
+    if spell and spells[spell] then
+        return spells[spell]
     end
     return {}
 end
@@ -69,6 +87,17 @@ end
 function spell_get_icon(spell, fallback)
     local action = spell_get_data(spell)
     return action.sprite or fallback
+end
+
+--[[ Obtain a wand's icon ]]
+function wand_get_icon(entid)
+    local comp = EntityGetFirstComponent(entid, "SpriteComponent")
+    if not comp or comp == 0 then return nil end
+
+    local icon_path = ComponentGetValue2(comp, "image_file")
+    if icon_path == "" then return nil end
+
+    return icon_path
 end
 
 --[[ Obtain the display name for the given action ]]

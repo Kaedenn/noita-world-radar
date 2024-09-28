@@ -113,7 +113,7 @@ function animal_build_name(name, path)
 end
 
 --[[ Get the display string for the entity ]]
-function get_name(entity)
+function get_display_name(entity)
     if entity_is_item(entity) then
         return item_get_name(entity)
     end
@@ -216,7 +216,7 @@ function get_with_tags(tags, filters)
             local is_held = is_child_of(entity, nil)
             if filters.no_player and is_held then goto continue end
             if filters.player and not is_held then goto continue end
-            entities[entity] = get_name(entity)
+            entities[entity] = get_display_name(entity)
             ::continue::
         end
     end

@@ -8,8 +8,10 @@ EVAL_FAIL = 2
 
 Eval = {
     code = "",
-    lines = MIN_LINES,
+    line_count = MIN_LINES,
+    repeat_code = false,
     print_func = nil,
+    lines = {},
     result = {          -- Output/result of the evaluation
         code = "",      -- Code that was evaluated
         func = nil,     -- Function created by load()
@@ -35,6 +37,7 @@ function Eval:set_print_function(func)
 end
 
 function Eval:_make_print_wrapper(host)
+    local this = self
     local real_print = _G.print
     return function(...)
         pcall(real_print, ...)
@@ -50,6 +53,7 @@ function Eval:_make_print_wrapper(host)
             line = "<empty>"
         end
         host.host:print(line)
+        table.insert(this.lines, line)
     end
 end
 
@@ -58,10 +62,10 @@ function Eval:draw(imgui, host)
     local line_height = imgui.GetTextLineHeight()
 
     ret, code = imgui.InputTextMultiline(
-        "##worldradar_eval",
+        "##world_radar_eval",
         self.code,
         -line_height * 4,
-        line_height * self.lines,
+        line_height * self.line_count,
         imgui.InputTextFlags.EnterReturnsTrue)
     if code and code ~= "" then
         self.code = code
@@ -72,8 +76,21 @@ function Eval:draw(imgui, host)
         exec_code = true
     end
     imgui.SameLine()
-    ret, self.lines = imgui.InputInt("Lines##worldradar_eval_lines", self.lines)
-    if self.lines < MIN_LINES then self.lines = MIN_LINES end
+
+    if imgui.Button("Clear") then
+        self.lines = {}
+    end
+    imgui.SameLine()
+
+    ret, self.repeat_code = imgui.Checkbox("Repeat", self.repeat_code)
+    if self.repeat_code then
+        exec_code = true
+    end
+    imgui.SameLine()
+
+    imgui.SetNextItemWidth(100)
+    ret, self.line_count = imgui.InputInt("Lines##world_radar_eval_lines", self.line_count)
+    if self.line_count < MIN_LINES then self.line_count = MIN_LINES end
 
     if exec_code then
         local function code_on_error(errmsg)
@@ -94,7 +111,8 @@ function Eval:draw(imgui, host)
         local eval_env = {
             ["self"] = self,
             ["panel"] = host,
-            ["print"] = self:_make_print_wrapper(host),
+            ["host"] = host and host.host or nil,
+            ["print"] = self.print_func or self:_make_print_wrapper(host),
             ["code"] = self.code,
             ["imgui"] = imgui,
             ["kae"] = dofile_once("mods/world_radar/files/lib/libkae.lua"),
@@ -127,6 +145,10 @@ function Eval:draw(imgui, host)
             value = pvalue
         }
         return EVAL_SUCCESS
+    end
+
+    for _, line in ipairs(self.lines) do
+        imgui.Text(line)
     end
 
     return EVAL_NOOP

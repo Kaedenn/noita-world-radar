@@ -5,20 +5,14 @@ FIXME: This file is huge
 
 TODO: Allow mods to add custom enemies and items
 
-TODO: Remove self.config.range, range_rule in lieu of conf_get
-
 TODO: Dynamically limit popup width to screen width
 
 TODO: Add I18N from shift_query to replace GameTextGet
 
 TODO: Add proper treasure chest drop scanning (wands, spells, containers)
 
-TODO: Refactor Gui* (_draw_onscreen_gui) code to its own module
-    Add draw functions to Panel base class
-    Handle identical structure to Panel:p
-
 TODO: On-screen UI improvements:
-    Add icons to entities, items, and materials
+    Refactor to use Panel draw_line_onscreen instead of custom one
     Add icons to treasure chest prediction
     Allow user to configure how the on-screen text is displayed
         Configure anchoring: currently bottom-left, but add other three
@@ -28,12 +22,15 @@ TODO: Non-radar improvements:
     Only display the primary biome of a biome group
     Add "show triggers" (eg. temple collapse) via barrier spell effect
 
-IDEA: Add "include all unknown spells" button
-IDEA: Add "include all unkilled enemies" button
-    These could be quite noisy for early-game
-IDEA: Limit menu choices to discovered things
-IDEA: Special formatting on general enemy list for unkilled enemies
+IDEA: Add "Hide/Show Unknown Spells" selection list checkbox
+IDEA: Add "Hide/Show Unkilled Enemies" selection list checkbox
+IDEA: Feedback (color? border?) on spell selection if not tracked on progress
+IDEA: Feedback (color? border?) on enemy selection if not tracked on progress
+IDEA: Feedback on nearby entity list if entity isn't tracked on progress
 --]]
+
+-- FIXME!! This mod seems to cause a large amount of lag, even when closed
+--  Seems to be related to Remove Spells on Pickup?
 
 dofile_once("data/scripts/lib/utilities.lua")
 
@@ -117,6 +114,9 @@ InfoPanel = {
         icons = {
             height = nil,               -- nil -> calculate height
         },
+        show_color = true,
+        show_images = true,
+        pos_relative = false,
     },
     env = {
         -- list_biomes = true
@@ -203,17 +203,6 @@ function _table_has_object(tbl, entry)
     return false
 end
 
---[[ Get all of the known spells ]]
-function InfoPanel:_get_spell_list()
-    -- luacheck: globals actions
-    dofile_once("data/scripts/gun/gun_actions.lua")
-    if actions and #actions > 0 then
-        return actions
-    end
-    self.host:p("Failed to determine spell list")
-    return {}
-end
-
 --[[ Get all of the known materials ]]
 function InfoPanel:_get_material_tables()
     -- See files/utility/material.lua generate_material_tables
@@ -249,7 +238,7 @@ function InfoPanel:_get_spell_by_name(sname)
     --}]]
     if not sname or sname == "" then return {} end
     if sname:match("^%$") then sname = sname:gsub("^%$", "") end
-    for _, entry in ipairs(self:_get_spell_list()) do
+    for _, entry in ipairs(get_spell_list()) do
         if table_has_entry({entry.id, entry.name, entry.path}, sname) then
             return {
                 id = entry.id,
@@ -394,7 +383,7 @@ function InfoPanel:_get_nearby_enemies()
     return self:_filter_entries(get_with_tags({"enemy"}))
 end
 
---[[ Search for nearby desirable spells ]]
+--[[ Search for nearby desirable spells; store in self.env ]]
 function InfoPanel:_find_spells()
     local spell_table = {}
     for _, entry in ipairs(self.env.spell_list) do
@@ -422,6 +411,7 @@ function InfoPanel:_find_spells()
     self.env.card_matches = {}
     for _, entry in ipairs(get_with_tags({"card_action"}, {no_player=true})) do
         local entid = entry[1]
+        if not EntityGetIsAlive(entid) then goto continue end
         local spell = card_get_spell(entid)
         local parent = EntityGetParent(entid)
         if self.env.wand_matches[parent] then goto continue end
@@ -579,6 +569,8 @@ function InfoPanel:_draw_onscreen_gui()
         return (image_height - char_height) / 2
     end
 
+    local this = self
+
     -- Draw text; returns right X coordinate
     local function draw_text(text_arg, xpos)
         local linex = xpos or padx
@@ -586,7 +578,7 @@ function InfoPanel:_draw_onscreen_gui()
         local text = text_arg
         if type(text_arg) == "table" then
             text = text_arg[1]
-            if text_arg.color and conf_get(CONF.SHOW_COLOR) then
+            if text_arg.color and this.config.show_color then
                 GuiColorSetForNextWidget(gui, unpack(text_arg.color))
             end
         end
@@ -604,7 +596,7 @@ function InfoPanel:_draw_onscreen_gui()
         if type(line) == "table" then
             text = line[1]
             local images = {}
-            if conf_get(CONF.SHOW_IMAGES) then
+            if this.config.show_images then
                 if line.image then
                     images = {line.image}
                 elseif line.images then
@@ -1052,8 +1044,7 @@ function InfoPanel:_draw_spell_dropdown(imgui)
     if self.env.spell_text ~= "" then
         local match_upper = self.env.spell_text:gsub("[^a-zA-Z0-9_]", ""):upper()
         local match_lower = self.env.spell_text:gsub("[^a-zA-Z0-9_]", ""):lower()
-        local spell_list = self:_get_spell_list()
-        for _, spell_entry in ipairs(spell_list) do
+        for _, spell_entry in ipairs(get_spell_list()) do
             local entry = {
                 id = spell_entry.id,
                 name = spell_entry.name,
@@ -1088,7 +1079,7 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                     table.insert(self.env.spell_list, entry)
                 end
                 imgui.SameLine()
-                if entry.icon and conf_get(CONF.SHOW_IMAGES) then
+                if entry.icon and self.config.show_images then
                     self.host:draw_image(imgui, entry.icon, true)
                     self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
                     imgui.SameLine()
@@ -1136,7 +1127,7 @@ function InfoPanel:_draw_spell_list(imgui)
         }, NOWRAP)
         imgui.SameLine()
         local hover_func = self:_make_spell_tooltip_func(entry)
-        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
+        if entry.icon and self.config.show_images then
             self.host:draw_image(imgui, entry.icon, true)
             self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
             imgui.SameLine()
@@ -1242,7 +1233,7 @@ function InfoPanel:_draw_material_dropdown(imgui)
             end
             imgui.SameLine()
             local hover_tooltip_func = self:_make_material_tooltip_func(entry)
-            if maticon and conf_get(CONF.SHOW_IMAGES) then
+            if maticon and self.config.show_images then
                 self.host:draw_image(imgui, maticon, true)
                 self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
                 imgui.SameLine()
@@ -1273,7 +1264,7 @@ function InfoPanel:_draw_material_list(imgui)
         self:_draw_hover_tooltip(imgui, "If checked, do not remove this material upon pickup")
         imgui.SameLine()
         local hover_tooltip_func = self:_make_material_tooltip_func(entry)
-        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
+        if entry.icon and self.config.show_images then
             self.host:draw_image(imgui, entry.icon, true)
             self:_draw_hover_tooltip(imgui, hover_tooltip_func, NOWRAP)
             imgui.SameLine()
@@ -1343,7 +1334,7 @@ function InfoPanel:_draw_entity_dropdown(imgui)
                 end
                 imgui.SameLine()
                 local hover_fn = self:_make_enemy_tooltip_func(entry)
-                if conf_get(CONF.SHOW_IMAGES) then
+                if self.config.show_images then
                     self.host:draw_image(imgui, entry.icon, true, {
                         fallback="data/ui_gfx/icon_unkown.png"
                     })
@@ -1368,7 +1359,7 @@ function InfoPanel:_draw_entity_list(imgui)
         end
         imgui.SameLine()
         local hover_fn = self:_make_enemy_tooltip_func(entry)
-        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
+        if entry.icon and self.config.show_images then
             self.host:draw_image(imgui, entry.icon, true, {
                 fallback="data/ui_gfx/icon_unkown.png"
             })
@@ -1444,7 +1435,7 @@ function InfoPanel:_draw_item_dropdown(imgui)
                     })
                 end
                 imgui.SameLine()
-                if entry.icon and conf_get(CONF.SHOW_IMAGES) then
+                if entry.icon and self.config.show_images then
                     self.host:draw_image(imgui, entry.icon, true, {
                         fallback="data/ui_gfx/icon_unkown.png"
                     })
@@ -1476,7 +1467,7 @@ function InfoPanel:_draw_item_list(imgui)
         self:_draw_hover_tooltip(imgui, "If checked, do not remove this item upon pickup")
         imgui.SameLine()
         local hover_func = self:_make_item_tooltip_func(entry)
-        if entry.icon and conf_get(CONF.SHOW_IMAGES) then
+        if entry.icon and self.config.show_images then
             self.host:draw_image(imgui, entry.icon, true, {
                 fallback="data/ui_gfx/icon_unkown.png"
             })
@@ -1852,7 +1843,7 @@ end
 
 --[[ Format a location ]]
 function InfoPanel:format_pos(x, y)
-    if conf_get(CONF.POS_RELATIVE) then
+    if self.config.pos_relative then
         local px, py = EntityGetTransform(get_players()[1])
         if px and py then
             x = x - px
@@ -2163,8 +2154,25 @@ end
 
 --[[ Public: draw the menu bar ]]
 function InfoPanel:draw_menu(imgui)
+    local menus = {
+        -- Plural, singular, env table name, env manage name
+        {"Spells", "Spell", "spell_list", "manage_spells"},
+        {"Materials", "Material", "material_list", "manage_materials"},
+        {"Entities", "Entity", "entity_list", "manage_entities"},
+        {"Items", "Item", "item_list", "manage_items"},
+    }
+
     local prefix
     if imgui.BeginMenu(self.name) then
+        if imgui.MenuItem("Save All Lists (This Run)") then
+            for _, entry in ipairs(menus) do
+                local plname, sname, tvar, evar = unpack(entry)
+                local data = smallfolk.dumps(self.env[tvar])
+                self.host:set_var(self.id, tvar, data)
+                GamePrint(("Saved %d %s"):format(#self.env[tvar], plname:lower()))
+            end
+        end
+        imgui.SeparatorText("Configuration")
         prefix = self.env.show_checkboxes and "Hide" or "Show"
         if imgui.MenuItem(prefix .. " Checkboxes") then
             self.env.show_checkboxes = not self.env.show_checkboxes
@@ -2172,10 +2180,16 @@ function InfoPanel:draw_menu(imgui)
         prefix = conf_get(CONF.SHOW_IMAGES) and "Hide" or "Show"
         if imgui.MenuItem(prefix .. " Images") then
             conf_toggle(CONF.SHOW_IMAGES)
+            self.config.show_images = conf_get(CONF.SHOW_IMAGES)
         end
         prefix = conf_get(CONF.CHEST_PREDICTION) and "Disable" or "Enable"
         if imgui.MenuItem(prefix .. " Chest Prediction") then
             conf_toggle(CONF.CHEST_PREDICTION)
+        end
+        prefix = conf_get(CONF.POS_RELATIVE) and "Disable" or "Enable"
+        if imgui.MenuItem(prefix .. " Relative Positions") then
+            conf_toggle(CONF.POS_RELATIVE)
+            self.config.pos_relative = conf_get(CONF.POS_RELATIVE)
         end
         imgui.SeparatorText("Pickup Actions")
         local items = {
@@ -2234,13 +2248,6 @@ function InfoPanel:draw_menu(imgui)
         imgui.EndMenu()
     end
 
-    local menus = {
-        -- Plural, singular, env table name, env manage name
-        {"Spells", "Spell", "spell_list", "manage_spells"},
-        {"Materials", "Material", "material_list", "manage_materials"},
-        {"Entities", "Entity", "entity_list", "manage_entities"},
-        {"Items", "Item", "item_list", "manage_items"},
-    }
     for _, entry in ipairs(menus) do
         local plname, sname, tvar, evar = unpack(entry)
         local data
@@ -2317,10 +2324,15 @@ function InfoPanel:draw(imgui)
 
     self.config.range_rule = conf_get(CONF.RADAR_RANGE)
     self.config.range = tonumber(conf_get(CONF.RADAR_RANGE_MANUAL))
+    self.config.show_images = conf_get(CONF.SHOW_IMAGES)
+    self.config.show_color = conf_get(CONF.SHOW_COLOR)
+    self.config.pos_relative = conf_get(CONF.POS_RELATIVE)
 
     self.host:text_clear()
 
-    self:_process_remove_entries()
+    if GameGetFrameNum() % 10 == 0 then
+        self:_process_remove_entries()
+    end
 
     self:_draw_checkboxes(imgui)
 
@@ -2349,14 +2361,18 @@ function InfoPanel:draw(imgui)
     end
 
     local found_something = false
+    function print_found_something()
+        if not found_something then
+            self.host:p({separator_text="Found something!!", color="yellow"})
+            found_something = true
+        end
+    end
+
     if self.env.find_items then
         local found_item_ids = {}
         for _, entry in ipairs(self:_find_containers()) do
+            print_found_something()
             found_item_ids[entry.entity] = entry
-            if not found_something then
-                self.host:p({separator_text="Found something!!", color="yellow"})
-                found_something = true
-            end
             local contents = {}
             for _, mat in ipairs(entry.rare_contents) do
                 local matname = mat.locname
@@ -2389,15 +2405,11 @@ function InfoPanel:draw(imgui)
                 local pos_str = self:format_pos(ex, ey)
                 self.host:d(("%s %d at %s"):format(entry.name, entry.entity, pos_str))
             end
-            found_something = true
         end
 
         for _, entry in ipairs(self:_find_items()) do
             if not found_item_ids[entry.entity] then
-                if not found_something then
-                    self.host:p({separator_text="Found something!!", color="yellow"})
-                    found_something = true
-                end
+                print_found_something()
                 local entinfo = entry.entry
                 self.host:p({
                     image = entinfo.icon,
@@ -2417,18 +2429,17 @@ function InfoPanel:draw(imgui)
 
     if self.env.find_enemies then
         for _, entity in ipairs(self:_find_enemies()) do
-            if not found_something then
-                self.host:p({separator_text="Found something!!", color="yellow"})
-                found_something = true
-            end
+            print_found_something()
             local entinfo = self:_get_entity_by_name(entity.path)
             local line = {
-                image = entinfo.icon,
-                fallback = "data/ui_gfx/icon_unkown.png",
-                hover = self:_make_enemy_tooltip_func(entinfo),
-                entity.name,
-                "detected nearby!!",
-            }
+                "Entity", {
+                    image = entinfo.icon,
+                    fallback = "data/ui_gfx/icon_unkown.png",
+                    hover = self:_make_enemy_tooltip_func(entinfo),
+                    color = "lightcyan",
+                    entity.name,
+                },
+                "detected nearby!!"}
             self.host:p(line)
             local ex, ey = EntityGetTransform(entity.entity)
             if ex ~= nil and ey ~= nil then
@@ -2439,6 +2450,7 @@ function InfoPanel:draw(imgui)
     end
 
     if self.env.find_spells then
+        self:_find_spells()
         for entid, _ in pairs(self.env.card_matches) do
             if not entid then goto continue end
             if not EntityGetIsAlive(entid) then goto continue end
@@ -2447,10 +2459,7 @@ function InfoPanel:draw(imgui)
                 self.host:print_error(("Card %d lacks spell"):format(entid))
                 goto continue
             end
-            if not found_something then
-                self.host:p({separator_text="Found something!!", color="yellow"})
-                found_something = true
-            end
+            print_found_something()
             local spell_name = GameTextGetTranslatedOrNot(spell_get_name(spell))
             local spell_data = spell_get_data(spell)
             local name = ("%s [%s]"):format(spell_name, spell)
@@ -2468,22 +2477,19 @@ function InfoPanel:draw(imgui)
             local wx, wy = EntityGetTransform(entid)
             if wx ~= nil and wy ~= nil then
                 local pos_str = self:format_pos(wx, wy)
-                self.host:d(("Spell %d at %s with %s"):format(entid, pos_str, name))
+                self.host:d(("Spell %d at %s %s"):format(entid, pos_str, name))
             end
             ::continue::
         end
 
-        self:_find_spells()
         for entid, ent_spells in pairs(self.env.wand_matches) do
             if not entid then goto continue end
             if not EntityGetIsAlive(entid) then goto continue end
-            if not found_something then
-                self.host:p({separator_text="Found something!!", color="yellow"})
-                found_something = true
-            end
+            print_found_something()
             local wand_info = self:_get_item_by_name(entity_get_lookup_key(entid))
+            local wand_icon = wand_get_icon(entid) or wand_info.icon
             local line = {{
-                image = wand_info.icon,
+                image = wand_icon,
                 fallback = "data/items_gfx/machinegun.png",
                 hover = self:_make_item_tooltip_func(wand_info),
                 "Wand with",
@@ -2494,15 +2500,19 @@ function InfoPanel:draw(imgui)
                 local spell_name = GameTextGetTranslatedOrNot(spell_get_name(spell))
                 local entry = self:_get_spell_by_name(spell)
                 local name = ("%s [%s]"):format(spell_name, spell)
-                if spell_is_always_cast(spell_id) then
-                    table.insert(spell_list, GameTextGet("$perk_always_cast"))
-                end
-                table.insert(spell_list, {
+                local list_entry = {
                     image = spell_data.sprite,
                     hover = self:_make_spell_tooltip_func(entry),
                     color = "lightcyan",
-                    name,
-                })
+                }
+                if spell_is_always_cast(spell_id) then
+                    table.insert(list_entry, {
+                        color = "lightgreen",
+                        "Always Cast",
+                    })
+                end
+                table.insert(list_entry, name)
+                table.insert(spell_list, list_entry)
             end
             table.insert(line, spell_list)
             table.insert(line, "detected nearby!!")
@@ -2604,24 +2614,26 @@ function InfoPanel:draw(imgui)
                         entity,
                     }
                     self.host:p(line)
-                elseif is_container then
-                    local capacity = container_get_capacity(entity)
-                    for matname, amount in pairs(container_get_contents(entity)) do
-                        local percent = amount / capacity * 100
-                        local matinfo = self:_get_material_by_name(matname)
-                        table.insert(contents, {
-                            image = matinfo.icon,
-                            fallback = "data/ui_gfx/icon_unkown.png",
-                            hover = self:_make_material_tooltip_func(matinfo),
-                            matname,
-                            ("%d%%"):format(percent),
-                        })
-                    end
-                    if #contents > 0 then
-                        table.insert(line, "with")
-                        table.insert(line, contents)
-                    else
-                        table.insert(line, "empty")
+                else
+                    if is_container then
+                        local capacity = container_get_capacity(entity)
+                        for matname, amount in pairs(container_get_contents(entity)) do
+                            local percent = amount / capacity * 100
+                            local matinfo = self:_get_material_by_name(matname)
+                            table.insert(contents, {
+                                image = matinfo.icon,
+                                fallback = "data/ui_gfx/icon_unkown.png",
+                                hover = self:_make_material_tooltip_func(matinfo),
+                                matname,
+                                ("%d%%"):format(percent),
+                            })
+                        end
+                        if #contents > 0 then
+                            table.insert(line, "with")
+                            table.insert(line, contents)
+                        else
+                            table.insert(line, "empty")
+                        end
                     end
                     self.host:d(line)
                 end
@@ -2667,10 +2679,12 @@ function InfoPanel:draw_closed(imgui)
     if self.env.find_spells then
         self:_find_spells()
     end
-    self:_draw_orb_radar()
     self:_draw_onscreen_gui()
+    self:_draw_orb_radar()
 
-    self:_process_remove_entries()
+    if GameGetFrameNum() % 10 == 0 then
+        self:_process_remove_entries()
+    end
 end
 
 --[[ Public: update configuration ]]

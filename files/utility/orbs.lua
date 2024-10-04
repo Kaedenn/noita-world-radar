@@ -198,11 +198,24 @@ Orbs = {
     list = {},
 
     -- Obtain all of the orbs belonging to the given world
-    get_within = function(self, world_name)
+    get_within = function(self, world_name, limit_uncollected)
         local wnum = world_get_number(world_name)
         local results = {}
         for _, orb in ipairs(self.list) do
             if orb:world() == wnum then
+                if not limit_uncollected or not orb:is_collected() then
+                    table.insert(results, orb)
+                end
+            end
+        end
+        return results
+    end,
+
+    -- Obtain all uncollected orbs
+    get_all = function(self, limit_uncollected)
+        local results = {}
+        for _, orb in ipairs(self.list) do
+            if not limit_uncollected or not orb:is_collected() then
                 table.insert(results, orb)
             end
         end
@@ -210,17 +223,17 @@ Orbs = {
     end,
 
     -- Obtain all main world orbs
-    get_main = function(self)
-        return self:get_within(WORLD_MAIN)
+    get_main = function(self, limit_uncollected)
+        return self:get_within(WORLD_MAIN, limit_uncollected)
     end,
 
     -- Obtain all parallel world orbs
-    get_parallel = function(self)
+    get_parallel = function(self, limit_uncollected)
         local result = {}
-        for _, orb in ipairs(self:get_within(WORLD_WEST)) do
+        for _, orb in ipairs(self:get_within(WORLD_WEST, limit_uncollected)) do
             table.insert(result, orb)
         end
-        for _, orb in ipairs(self:get_within(WORLD_EAST)) do
+        for _, orb in ipairs(self:get_within(WORLD_EAST, limit_uncollected)) do
             table.insert(result, orb)
         end
         return result
@@ -229,7 +242,11 @@ Orbs = {
     -- Determine the nearest uncollected orb
     nearest = function(self, px, py)
         local results = {}
-        for _, orb in ipairs(self.list) do table.insert(results, orb) end
+        for _, orb in ipairs(self.list) do
+            if not orb:is_collected() then
+                table.insert(results, orb)
+            end
+        end
         table.sort(results, make_distance_sorter(px, py))
         return results
     end,

@@ -519,25 +519,19 @@ function InfoPanel:_draw_orb_radar()
     local orb_list = Orbs.list
     if limit == "world" then
         local world = world_get_name(check_parallel_pos(px))
-        orb_list = Orbs:get_within(world)
+        orb_list = Orbs:get_within(world, true)
     elseif limit == "main" then
-        orb_list = Orbs:get_main()
+        orb_list = Orbs:get_main(true)
     elseif limit == "parallel" then
-        orb_list = Orbs:get_parallel()
+        orb_list = Orbs:get_parallel(true)
     elseif limit == "both" then
-        orb_list = Orbs.list
+        orb_list = Orbs:get_all(true)
     end
 
     table.sort(orb_list, make_distance_sorter(px, py))
 
     for idx = 1, math.min(display, #orb_list) do
         local orb_x, orb_y = unpack(orb_list[idx]:pos())
-        Radar:configure{
-            range = 1024,
-            range_medium = 1024*0.25,
-            range_faint = 1024*0.5,
-            next_only = true
-        }
         Radar:draw_for_pos(orb_x, orb_y, RADAR_ORB)
     end
 end

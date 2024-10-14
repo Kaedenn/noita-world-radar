@@ -1,7 +1,10 @@
---[[ Simple profiler ]]
+--[[ Simple profiler
+--
+-- Profiles time between each start() and tick() call.
+--]]
 
 Profiler = {
-    interval = 5,
+    interval = 10,
 
     rule = "average",
     data = {},
@@ -30,28 +33,27 @@ function profiler_aggregate(samples, rule)
 end
 
 function Profiler:start(name)
-    self.data[name] = {
-        start = GameGetRealWorldTimeSinceStarted(),
-        start_frame = GameGetFrameNum(),
-        samples = {},
-        current = 0,
-    }
+    if not self.data[name] then
+        self.data[name] = {
+            prior = 0,
+            samples = {},
+            current = 0,
+        }
+    end
+    local curr = GameGetRealWorldTimeSinceStarted()
+    self.data[name].prior = curr
 end
 
 function Profiler:tick(name)
-    if not self.data[name] then self:start(name) end
-    local curr = GameGetRealWorldTimeSinceStarted()
-    local curr_frame = GameGetFrameNum()
-
     local data = self.data[name]
-
-    local dt = curr - data.start
-    local df = curr_frame - data.start_frame
-    local framenum = df % self.interval
-    if framenum == 0 then
+    local curr = GameGetRealWorldTimeSinceStarted()
+    local dt = curr - data.prior
+    if #data.samples >= self.interval then
         data.current = profiler_aggregate(data.samples, self.rule)
+        data.samples = {}
     end
-    data.samples[framenum + 1] = dt
+    data.prior = curr
+    data.samples[#data.samples+1] = dt
 
     return data.current
 end

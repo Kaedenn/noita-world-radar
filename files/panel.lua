@@ -723,7 +723,10 @@ end
 --]]
 function Panel:draw_line_onscreen(line, pos, show_images, show_color, data, extra)
     local id = extra and extra.id or 0
-    local function next_id() id = id + 1; return id end
+    local function next_id()
+        id = id + 1
+        return id
+    end
     if show_images == nil then show_images = conf_get(CONF.SHOW_IMAGES) end
     if show_color == nil then show_color = conf_get(CONF.SHOW_COLOR) end
     GuiStartFrame(self.gui)
@@ -732,12 +735,18 @@ function Panel:draw_line_onscreen(line, pos, show_images, show_color, data, extr
     if not data then GuiIdPushString(self.gui, MOD_ID .. "_panel_onscreen") end
 
     local curr_x, curr_y = unpack(pos or {nil, nil})
-    if not curr_x then curr_x = char_width * 2 end
-    if not curr_y then
-        curr_y = screen_height - char_height * 2
-    elseif curr_y < 0 then
-        curr_y = screen_height - char_height * math.abs(curr_y)
+    if not curr_x then
+        curr_x = char_width * 2
+    elseif type(curr_x) == "string" then
+        curr_x = char_width * tonumber(curr_x)
     end
+    if not curr_y then
+        curr_y = -char_height * 2
+    elseif type(curr_y) == "string" then
+        curr_y = char_height * tonumber(curr_y)
+    end
+    if curr_x < 0 then curr_x = screen_width + curr_x end
+    if curr_y < 0 then curr_y = screen_height + curr_y end
 
     local base_pos = extra and extra.base_pos or {curr_x, curr_y}
     if type(line) == "table" then
@@ -813,13 +822,20 @@ function Panel:draw_line_onscreen(line, pos, show_images, show_color, data, extr
 
         local temp_y = curr_y
         for _, token in ipairs(line) do
+            local extra_arg = {}
+            for key, val in pairs(extra or {}) do
+                extra_arg[key] = val
+            end
+            extra_arg.id = id
+            extra_arg.color = color
+            extra_arg.base_pos = base_pos
             curr_x, temp_y = self:draw_line_onscreen(
                 token,
                 {curr_x, curr_y},
                 show_images,
                 show_color,
                 line,
-                {id=id, color=color, base_pos=base_pos})
+                extra_arg)
             temp_y = math.max(curr_y, temp_y)
         end
         curr_y = temp_y
@@ -841,9 +857,16 @@ function Panel:draw_line_onscreen(line, pos, show_images, show_color, data, extr
                 GuiColorSetForNextWidget(self.gui, tr, tg, tb, ta)
             end
         end
-        GuiText(self.gui, curr_x, curr_y, line)
         local textw, texth = GuiGetTextDimensions(self.gui, line)
-        curr_x = curr_x + textw
+        if extra and extra.monospace then
+            for cidx = 1, #line do
+                GuiText(self.gui, curr_x, curr_y, line:sub(cidx, cidx))
+                curr_x = curr_x + char_width
+            end
+        else
+            GuiText(self.gui, curr_x, curr_y, line)
+            curr_x = curr_x + textw
+        end
         curr_y = curr_y + texth
     end
     if not data then GuiIdPop(self.gui) end

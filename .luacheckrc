@@ -155,6 +155,8 @@ files["init.lua"] = {
     "conf_get",
     -- "mods/world_radar/files/utility/material.lua"
     "generate_material_tables",
+    -- "mods/world_radar/files/lib/profiler.lua"
+    "Profiler",
   },
 }
 

@@ -13,6 +13,7 @@
 
 dofile_once("mods/world_radar/config.lua")
 dofile_once("mods/world_radar/files/utility/material.lua")
+dofile_once("mods/world_radar/files/lib/profiler.lua")
 
 MaterialTables = {}
 KPanelLib = dofile("mods/world_radar/files/panel.lua")
@@ -46,7 +47,7 @@ function _build_menu_bar_gui()
 end
 
 function _build_gui()
-    if KPanel and KPanel:current() ~= nil then
+    if KPanel then
         KPanel:draw(imgui)
     end
 end
@@ -85,6 +86,8 @@ function OnWorldPostUpdate()
         KPanel:set("info")
     end
 
+    local profile = GlobalsGetValue("kae_profile")
+    Profiler:start("main")
     local show_closed = conf_get(CONF.SHOW_CLOSED)
     if conf_get(CONF.ENABLE) then
         if imgui.Begin("World Information Scanner###world_radar", nil, bit.bor(
@@ -95,12 +98,19 @@ function OnWorldPostUpdate()
             do_call(_build_gui)
             imgui.End()
         elseif KPanel then
-            KPanel:draw_closed(imgui)
+            do_call(KPanel.draw_closed, KPanel, imgui)
         end
     elseif show_closed then
-        KPanel:draw_closed(imgui)
+        do_call(KPanel.draw_closed, KPanel, imgui)
     end
-
+    local end_time = GameGetRealWorldTimeSinceStarted()
+    if profile ~= "" then
+        local measure = Profiler:tick("main")
+        local time_str = ("%3dus"):format(1000000 * measure)
+        KPanel:draw_line_onscreen(time_str, {"1", "1"}, true, true, {}, {
+            monospace = true,
+        })
+    end
 end
 
 -- vim: set ts=4 sts=4 sw=4 tw=79:

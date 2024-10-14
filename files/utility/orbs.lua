@@ -253,6 +253,7 @@ Orbs = {
 
     -- Initialize the orb list
     init = function(self)
+        self.list = {}
         local newgame_n = tonumber(SessionNumbersGetValue("NEW_GAME_PLUS_COUNT"))
         local orb_map = orb_map_get()
         for _, orb_def in ipairs(Orbs.MAP) do

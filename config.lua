@@ -13,7 +13,9 @@ CONF = {
     SHOW_IMAGES = "show_images",
     SHOW_COLOR = "color",
     SHOW_CLOSED = "show_closed",
+    SIMPLE_NAMES = "simple_names",
     CHEST_PREDICTION = "chest_prediction",
+    CHEST_SCANNING = "chest_scanning",
     POS_RELATIVE = "pos_relative",
 
     RADAR_DISTANCE = "radar_distance",

@@ -115,6 +115,8 @@ files["files/panels/info.lua"] = {
     "action_lookup",
     -- "mods/world_radar/files/utility/treasure_chest.lua"
     "entity_is_chest",
+    "chest_get_lookup_data",
+    "entity_get_spawn_pos",
     "chest_get_rewards",
     "format_rewards",
     "REWARD",
@@ -140,6 +142,7 @@ files["files/panels/info.lua"] = {
     "table_concat",
     "split_string",
     "first_of",
+    "stats_check_spell",
     "generate_traceback",
   },
 }

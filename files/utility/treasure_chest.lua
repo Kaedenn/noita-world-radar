@@ -47,6 +47,8 @@ end
 
 --]]
 
+-- TODO: Determine what spells each wand would spawn with
+
 dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("data/scripts/gun/gun_enums.lua")
 dofile_once("data/scripts/gun/gun_actions.lua")
@@ -76,6 +78,9 @@ CONTAINER = {
 
 --[[ True if the entity is a treasure chest we can predict ]]
 function entity_is_chest(entid)
+    if not EntityGetIsAlive(entid) then
+        return false
+    end
     if EntityHasTag(entid, "chest") then
         local iname = EntityGetFilename(entid)
         if (iname:match("chest_random_super.xml") or
@@ -88,6 +93,35 @@ function entity_is_chest(entid)
     return false
 end
 
+--[[ Obtain the lookup key and supporting data for the given treasure chest ]]
+function chest_get_lookup_data(entid)
+    local seed_x, seed_y = entity_get_spawn_pos(entid)
+    local entfname = EntityGetFilename(entid)
+    local lookup_key = nil
+    for _, key in ipairs({"chest_random_super", "chest_random", "utility_box"}) do
+        if entfname:match(key) then
+            lookup_key = key
+            break
+        end
+    end
+    if lookup_key ~= nil then
+        lookup_key = ("%s[%.2f,%.2f]"):format(lookup_key, seed_x, seed_y)
+        return lookup_key, seed_x, seed_y
+    end
+    return nil, nil, nil
+end
+
+--[[ Determine the spawn coordinates for the given entity ]]
+function entity_get_spawn_pos(entity_id)
+    local position_comp = EntityGetFirstComponent(entity_id, "PositionSeedComponent")
+    local seed_x, seed_y = EntityGetTransform(entity_id)
+    if position_comp and position_comp ~= 0 then
+        seed_x = tonumber(ComponentGetValue(position_comp, "pos_x"))
+        seed_y = tonumber(ComponentGetValue(position_comp, "pos_y"))
+    end
+    return seed_x, seed_y
+end
+
 --[[ Obtain the rewards that would be dropped by the treasure chest ]]
 function chest_get_rewards(entity_id, do_debug)
     local x, y = EntityGetTransform(entity_id)
@@ -96,12 +130,7 @@ function chest_get_rewards(entity_id, do_debug)
         error(("Failed to get location of entity %s"):format(tostring(entity_id)))
     end
 
-    local position_comp = EntityGetFirstComponent(entity_id, "PositionSeedComponent")
-    local seed_x, seed_y = rand_x, rand_y
-    if position_comp then
-        seed_x = tonumber(ComponentGetValue(position_comp, "pos_x"))
-        seed_y = tonumber(ComponentGetValue(position_comp, "pos_y"))
-    end
+    local seed_x, seed_y = entity_get_spawn_pos(entity_id)
 
     local fname = EntityGetFilename(entity_id)
     local rewards = {}

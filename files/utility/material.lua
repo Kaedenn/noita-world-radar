@@ -10,7 +10,9 @@ local function _parse_cell_data(entry)
     for key, val in pairs(entry.attr) do
         result[key] = val
     end
-    -- TODO: children
+    for _, child in ipairs(entry.children) do
+        -- TODO: children
+    end
     return result
 end
 
@@ -26,10 +28,8 @@ local function _parse_cell_data_child(entry)
         end
     end
 
-    if #entry.children > 0 then
-        for _, child in ipairs(entry.children) do
-            result[child.name] = child -- TODO: parse
-        end
+    for _, child in ipairs(entry.children) do
+        result[child.name] = child -- TODO: parse
     end
 
     return result

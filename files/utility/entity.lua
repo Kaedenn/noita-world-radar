@@ -29,8 +29,8 @@ function entity_is_enemy(entity)
 end
 
 --[[ Get the display string for an item entity ]]
-function item_get_name(entity)
-    local name = EntityGetName(entity)
+function item_get_name(entity, simplify)
+    local name = EntityGetName(entity) or ""
     local comps = EntityGetComponentIncludingDisabled(entity, "ItemComponent") or {}
     for _, comp in ipairs(comps) do
         local uiname = ComponentGetValue2(comp, "item_name")
@@ -42,38 +42,47 @@ function item_get_name(entity)
 
     local path = EntityGetFilename(entity)
     if path:match("chest_random_super.xml") then
-        return ("%s [%s]"):format(
-            GameTextGet("$item_chest_treasure_super"),
-            "chest_random_super.xml")
+        local ename = GameTextGet("$item_chest_treasure_super")
+        if simplify then
+            return ename
+        end
+        return ("%s [%s]"):format(ename, "chest_random_super.xml")
     end
     if path:match("physics_greed_die.xml") then
-        return ("%s [%s]"):format(
-            GameTextGet("$item_greed_die"),
-            "physics_greed_die.xml")
+        local ename = GameTextGet("$item_greed_die")
+        if simplify then
+            return ename
+        end
+        return ("%s [%s]"):format(ename, "physics_greed_die.xml")
     end
 
     if name ~= "" and name:match("^[$][%a]+_[%a%d_]+$") then
         locname = GameTextGet(name)
         name = name:gsub("^[$][%a]+_", "") -- strip "$item_" prefix
+        if simplify then
+            return locname
+        end
         if locname:lower() ~= name:lower() then
             return ("%s [%s]"):format(locname, name)
         end
         return locname
     end
 
-    if name ~= "" then return name end
+    if name == "" then
+        name = path:gsub("^[%a_/]+/([%a%d_]+).xml", "%1")
+    end
     return nil
 end
 
 --[[ Get the display string for an enemy entity ]]
-function enemy_get_name(entity)
-    local name = EntityGetName(entity)
+function enemy_get_name(entity, simplify)
+    local name = EntityGetName(entity) or ""
     local path = EntityGetFilename(entity)
-    return animal_build_name(name, path)
+    return animal_build_name(name, path, simplify)
 end
 
 --[[ Format the display name for the given animal ]]
-function animal_build_name(name, path)
+function animal_build_name(name, path, simplify)
     local function path_to_string(dirname, basename)
         if dirname == basename then
             return dirname
@@ -98,6 +107,10 @@ function animal_build_name(name, path)
         name = label
     end
 
+    if simplify then
+        return locname
+    end
+
     local result = name
     local locname_u = locname:lower()
     local label_u = label:lower()
@@ -113,17 +126,17 @@ function animal_build_name(name, path)
 end
 
 --[[ Get the display string for the entity ]]
-function get_display_name(entity)
+function get_display_name(entity, simplify)
     if entity_is_item(entity) then
-        return item_get_name(entity)
+        return item_get_name(entity, simplify)
     end
 
     if entity_is_enemy(entity) then
-        return enemy_get_name(entity)
+        return enemy_get_name(entity, simplify)
     end
 
     -- Default behavior for "other" entity types
-    local name = EntityGetName(entity)
+    local name = EntityGetName(entity) or ""
     local path = EntityGetFilename(entity)
     if path:match("data/entities/items/pickup/([%a_]+).xml") then
         path = path:gsub("data/entities/items/pickup/([%a_]+).xml", "%1")
@@ -132,8 +145,13 @@ function get_display_name(entity)
     elseif path:match("data/entities/animals/([%a_]+).xml") then
         path = path:gsub("data/entities/animals/([%a_]+).xml", "%1")
     end
-    if name ~= "" and name:lower() ~= path:lower() then
-        return ("%s [%s]"):format(name, path)
+    if name ~= "" then
+        if not simplify then
+            if name:lower() ~= path:lower() then
+                return ("%s [%s]"):format(name, path)
+            end
+        end
+        return name
     end
     return path
 end
@@ -206,7 +224,7 @@ end
 --  no_player       omit entities descending from (held by) the player
 --  player          omit entities not descending from (held by) the player
 --]]
-function get_with_tags(tags, filters)
+function get_with_tags(tags, filters, simplify)
     if not filters then filters = {} end
     local entities = {}
     for _, tag in ipairs(tags) do
@@ -216,7 +234,7 @@ function get_with_tags(tags, filters)
             local is_held = is_child_of(entity, nil)
             if filters.no_player and is_held then goto continue end
             if filters.player and not is_held then goto continue end
-            entities[entity] = get_display_name(entity)
+            entities[entity] = get_display_name(entity, simplify)
             ::continue::
         end
     end

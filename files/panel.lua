@@ -32,8 +32,6 @@
 -- Panels are allowed to have whatever else they desire in their panel table.
 --]]
 
--- TODO: onscreen text: add instance list like Panel.lines
-
 --[[ Line Format
 The Panel class supports fairly complex layout for printing lines using the
 Panel:p() and Panel:d() functions. A line is either a string or a table of
@@ -90,6 +88,11 @@ dofile_once("data/scripts/lib/utilities.lua")
 dofile_once("mods/world_radar/config.lua")
 dofile_once("mods/world_radar/files/lib/utility.lua")
 
+--[[ Built-in panels ]]
+PANELS_NATIVE = {
+    dofile_once("mods/world_radar/files/panels/info.lua"),
+}
+
 --[[ Template object with default values for the Panel class ]]
 Panel = {
     initialized = false,
@@ -102,6 +105,7 @@ Panel = {
     config = {          -- non-persistent configuration
         menu_show = true,       -- draw the Panels menu
         menu_show_clear = true, -- include the Clear menu item
+        fallback = "data/ui_gfx/icon_unkown.png", -- Fallback image
     },
 
     colors = {          -- text color configuration
@@ -141,11 +145,6 @@ Panel.DEFAULT_VALUE = ("<%s>"):format(string.char(0x7f))
 
 --[[ GlobalsGetValue/GlobalsSetValue current panel ]]
 Panel.SAVE_KEY = MOD_ID .. "_current_panel"
-
---[[ Built-in panels ]]
-PANELS_NATIVE = {
-    dofile_once("mods/world_radar/files/panels/info.lua"),
-}
 
 --[[ Create the panel subsystem.
 --
@@ -226,6 +225,15 @@ function Panel:init(env, config)
 
     if not self.gui then self.gui = GuiCreate() end
     self.initialized = true
+end
+
+--[[ Notify the panels that the player has spawned ]]
+function Panel:on_player_spawned(player_entity)
+    for _, panel in pairs(self.PANELS) do
+        if panel.on_player_spawned then
+            panel:on_player_spawned(player_entity)
+        end
+    end
 end
 
 --[[ Enable or disable debugging (toggle if nil) ]]
@@ -401,6 +409,11 @@ function Panel:remove_value(pid, varname)
     return ModSettingRemove(key)
 end
 
+--[[ Set the fallback image if loading an image fails ]]
+function Panel:set_fallback_image(path)
+    self.config.fallback = path
+end
+
 --[[ Build the window menu ]]
 function Panel:build_menu(imgui)
     local current = self:current()
@@ -464,11 +477,11 @@ function Panel:build_menu(imgui)
 end
 
 --[[ Draw an image to the feedback box ]]
-function Panel:draw_image(imgui, image, rescale, extra)
+function Panel:draw_image(imgui, image, rescale, parent)
     local path = image
     local width, height, uvx, uvy = 0, 0, 0, 0
     local frame_width, frame_height = nil, nil
-    local odata = extra or {}
+    local odata = parent or {}
     local hover_obj = odata.hover
     if type(image) == "table" then
         path = image.path
@@ -481,8 +494,8 @@ function Panel:draw_image(imgui, image, rescale, extra)
         return false
     end
     local img = imgui.LoadImage(path)
-    if not img and odata.fallback then
-        path = odata.fallback
+    if not img then
+        path = odata.fallback or self.config.fallback
         img = imgui.LoadImage(path)
     end
     if not img then
@@ -548,10 +561,10 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
     if show_images == nil then show_images = conf_get(CONF.SHOW_IMAGES) end
     if show_color == nil then show_color = conf_get(CONF.SHOW_COLOR) end
     if type(line) == "table" then
-        local level = line.level or nil
-        local color = line.color or nil
-        if color == nil and level ~= nil then
-            color = self.colors[level] or nil
+        local level = line.level
+        local color = line.color
+        if not color and level then
+            color = self.colors[level]
         end
 
         -- Display "time remaining" as a simple percentage
@@ -562,7 +575,7 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
             else
                 local percent = math.floor(ratio * 100)
                 local prefix = ("%02d"):format(math.min(percent, 99))
-                imgui.SetNextItemWidth(16) -- FIXME: Calculate actual width
+                imgui.SetNextItemWidth(16)
                 imgui.TextDisabled(prefix)
             end
             if imgui.IsItemHovered() then
@@ -586,10 +599,15 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
             pushed_color = true
         end
 
-        if (line.image or line.fallback) and show_images then
-            -- FIXME: Draw fallback if drawing line.image fails
-            self:draw_image(imgui, line.image or line.fallback, true, line)
-            imgui.SameLine()
+        if show_images then
+            if not line.image and line.fallback then
+                line.image = line.fallback
+                line.fallback = nil
+            end
+            if line.image then
+                self:draw_image(imgui, line.image, true, line)
+                imgui.SameLine()
+            end
         end
 
         if line.button then
@@ -619,8 +637,8 @@ function Panel:draw_line(imgui, line, show_images, show_color, data)
 
             if ret then
                 local bargs = {unpack(line.button)} -- Copy to modify
-                table.insert(bargs, self)   -- Append self
-                table.insert(bargs, imgui)  -- Append imgui
+                table.insert(bargs, self)
+                table.insert(bargs, imgui)
                 local result, value = pcall(bfunc, unpack(bargs))
                 if not result then
                     self:print_error(("ERROR: %s"):format(value))
@@ -746,9 +764,12 @@ function Panel:draw_line_onscreen(line, pos, show_images, show_color, data, extr
 
         if (line.image or line.fallback) and show_images then
             local image_path = line.image
-            local img_width, img_height = GuiGetImageDimensions(self.gui, image_path)
+            local img_width, img_height = 0, 0
+            if image_path then
+                img_width, img_height = GuiGetImageDimensions(self.gui, image_path)
+            end
             if img_width == 0 and img_height == 0 then
-                image_path = line.fallback
+                image_path = line.fallback or self.config.fallback
                 img_width, img_height = GuiGetImageDimensions(self.gui, image_path)
             end
             if img_width ~= 0 and img_height ~= 0 then

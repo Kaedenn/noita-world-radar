@@ -63,6 +63,9 @@ function OnModPostInit()
 end
 
 function OnPlayerSpawned(player_entity)
+    if KPanel and KPanel.initialized then
+        KPanel:on_player_spawned(player_entity)
+    end
 end
 
 function OnWorldPostUpdate()

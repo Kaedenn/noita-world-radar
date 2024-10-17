@@ -4,10 +4,17 @@ The "Info" Panel: Display interesting information
 FIXME: This file is huge
     Refactor supporting code into separate modules, where possible
 
+FIXME: Use a metatable to improve list/cache iteration below O(n)
+
+FIXME: Chest content matching breaks if a chest is opened
+
 FIXME: Remove held items doesn't work for pouches
     Likely because the filename becomes the player
 
-TODO: Allow mods to add custom enemies and items
+TODO: Refactor "nearby thing scanning" to iterate over the desired object list
+    and match based on path instead of scanning via tags. This precludes custom
+    non-enemy entities (like portals, props) and may help improve runtime.
+        It could also make it worse if we have to iterate over EVERY entity.
 
 TODO: Dynamically limit popup width to screen width
 
@@ -213,6 +220,15 @@ end
 function InfoPanel:_get_entity_list()
     if not self.env.entity_cache or #self.env.entity_cache == 0 then
         self.env.entity_cache = dofile("mods/world_radar/files/generated/entity_list.lua")
+        local cache_obj = self.env.entity_cache
+        local function process_appends()
+            dofile("mods/world_radar/data/world_radar/append/entity_list.lua")
+            -- luacheck: globals ENTITY_EXTRA
+            for _, entry in ipairs(ENTITY_EXTRA) do
+                table.insert(cache_obj, entry)
+            end
+        end
+        process_appends()
     end
     return self.env.entity_cache
 end
@@ -221,6 +237,15 @@ end
 function InfoPanel:_get_item_list()
     if not self.env.item_cache or #self.env.item_cache == 0 then
         self.env.item_cache = dofile("mods/world_radar/files/generated/item_list.lua")
+        local cache_obj = self.env.item_cache
+        local function process_appends()
+            dofile("mods/world_radar/data/world_radar/append/item_list.lua")
+            -- luacheck: globals ITEM_EXTRA
+            for _, entry in ipairs(ITEM_EXTRA) do
+                table.insert(cache_obj, entry)
+            end
+        end
+        process_appends()
     end
     return self.env.item_cache
 end
@@ -376,14 +401,14 @@ function InfoPanel:_get_nearby(taglist, filters)
     return self:_filter_entries(get_with_tags(taglist, filters or {}, simplify))
 end
 
---[[ Get all nearby non-held items ]]
+--[[ Get all nearby non-held items (FIXME: Won't work for modded entries without item_pickup tag) ]]
 function InfoPanel:_get_nearby_items()
     return self:_get_nearby({"item_pickup"})
 end
 
---[[ Get all nearby enemies ]]
+--[[ Get all nearby enemies (FIXME: Won't work for modded entries without enemy tag) ]]
 function InfoPanel:_get_nearby_enemies()
-    return self:_get_nearby({"enemy"})
+    return self:_get_nearby({"enemy"})--, "mortal", "hittable"})
 end
 
 --[[ Clear treasure chests that have been opened ]]
@@ -462,6 +487,7 @@ function InfoPanel:_find_spells()
     if self.config.chest_scanning then
         for lookup_key, entry in pairs(self.env.chest_cache) do
             local entid = entry.entity
+            if not entity_is_chest(entid) then goto next_chest end
             local entx, enty = EntityGetTransform(entid)
             for _, reward in ipairs(entry.contents) do
                 if reward.type ~= "card" then goto next_content end
@@ -479,6 +505,7 @@ function InfoPanel:_find_spells()
                 end
                 ::next_content::
             end
+            ::next_chest::
         end
     end
 end
@@ -514,6 +541,7 @@ function InfoPanel:_find_containers()
     if self.config.chest_scanning then
         for lookup_key, chest_info in pairs(self.env.chest_cache) do
             local entity = chest_info.entity
+            if not entity_is_chest(entity) then goto next_chest end
             local entx, enty = EntityGetTransform(entity)
             local entname = item_get_name(entity, true)
             local matlist = {}
@@ -547,6 +575,7 @@ function InfoPanel:_find_containers()
                     end
                 end
             end
+            ::next_chest::
         end
     end
 
@@ -582,6 +611,7 @@ function InfoPanel:_find_enemies()
     if self.config.chest_scanning then
         for lookup_key, chest_info in pairs(self.env.chest_cache) do
             local entity = chest_info.entity
+            if not entity_is_chest(entity) then goto next_chest end
             local entname = item_get_name(entity, true)
             local entx, enty = EntityGetTransform(entity)
             for _, reward in ipairs(chest_info.contents) do
@@ -605,6 +635,7 @@ function InfoPanel:_find_enemies()
                     end
                 end
             end
+            ::next_chest::
         end
     end
 
@@ -632,6 +663,7 @@ function InfoPanel:_find_items()
     if self.config.chest_scanning then
         for lookup_key, chest_info in pairs(self.env.chest_cache) do
             local entity = chest_info.entity
+            if not entity_is_chest(entity) then goto next_chest end
             local entx, enty = EntityGetTransform(entity)
             local entname = item_get_name(entity, true)
             for _, reward in ipairs(chest_info.contents) do
@@ -649,6 +681,7 @@ function InfoPanel:_find_items()
                     end
                 end
             end
+            ::next_chest::
         end
     end
     return items, chest_items
@@ -2397,6 +2430,24 @@ function InfoPanel:on_player_spawned(player_entity)
     end
 end
 
+--[[ Public: forcibly reload the caches ]]
+function InfoPanel:reload_all()
+    self:on_player_spawned(get_players()[1])
+
+    self.env.material_cache = nil
+    self:_get_material_tables()
+
+    self.env.entity_cache = nil
+    self:_get_entity_list()
+
+    self.env.item_cache = nil
+    self:_get_item_list()
+
+    self.env.wand_matches = {}
+    self.env.card_matches = {}
+    self.env.spell_chest_matches = {}
+end
+
 --[[ Public: draw the menu bar ]]
 function InfoPanel:draw_menu(imgui)
     local menus = {
@@ -2504,6 +2555,10 @@ function InfoPanel:draw_menu(imgui)
         imgui.Separator()
         if imgui.MenuItem("Toggle Internal Debugging") then
             self.env.debug.on = not self.env.debug.on
+        end
+        if imgui.MenuItem("Reload All") then
+            self:reload_all()
+            GamePrint("Cleared and reloaded all caches")
         end
         imgui.EndMenu()
     end
@@ -3022,15 +3077,16 @@ end
 
 --[[ Public: called when the panel window is closed ]]
 function InfoPanel:draw_closed(imgui)
-    if self.env.find_spells then
-        self:_find_spells()
-    end
-    self:_draw_onscreen_gui()
-    self:_draw_orb_radar()
-
     if self.config.chest_scanning then
         self:_clear_opened_chests()
     end
+
+    if self.env.find_spells then
+        self:_find_spells()
+    end
+
+    self:_draw_onscreen_gui()
+    self:_draw_orb_radar()
 
     if GameGetFrameNum() % 10 == 0 then
         self:_process_remove_entries()

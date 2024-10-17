@@ -21,5 +21,25 @@ table.insert(ENTITY_EXTRA, {
 
 --]]
 
-ENTITY_EXTRA = {}
+ENTITY_EXTRA = {
+  { -- Meditation Cube
+    id = "teleport_meditation_cube",
+    name = "Meditation Cube",
+    path = "data/entities/buildings/teleport_meditation_cube.xml",
+    icon = "data/ui_gfx/gun_actions/summon_portal.png",
+    tags = "",
+    data = {
+      effects = {},
+      health = 0,
+      herd = "",
+    },
+  },
+  { -- Propane Tank
+    id = "physics_propane_tank",
+    name = "Propane Tank",
+    path = "data/entities/props/physics_propane_tank.xml",
+    icon = "data/props_gfx/propane_tank.png",
+    tags = "mortal,hittable,teleportable_NOT,prop,prop_physics",
+  },
+}
 

@@ -1087,7 +1087,7 @@ function InfoPanel:_init_tables()
                 self.host:set_var(self.id, var, smallfolk.dumps(data))
             end
             self.env[var] = data
-            self.host:print(("Loaded %d %s from %s %s table"):format(
+            print(("Loaded %d %s from %s %s table"):format(
                 #self.env[var], name, from_table, var))
         end
     end

@@ -32,11 +32,15 @@ logging.basicConfig(format="%(module)s:%(lineno)s: %(levelname)s: %(message)s",
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Enemy Radar perk: da4a16
+# Item Radar perk: 4376ff
+# Wand Radar perk: 39cd2b
+
 COLORS = {
-  "entity": (0xda, 0x4a, 0x16, 0xff),
-  "item": (0x3e, 0xff, 0x57, 0xff),
-  "material": (0xff, 0xff, 0x00, 0xff),
-  "spell": (0x00, 0x49, 0xf9, 0xff),
+  "entity": (0xda, 0x4a, 0x16, 0xff),   # same as Enemy Radar perk
+  "item": (0x43, 0x7f, 0xff, 0xff),     # same as Item Radar perk
+  "material": (0xff, 0xff, 0x00, 0xff), # ffff00, yellow
+  "spell": (0x39, 0xcd, 0x2b, 0xff),    # same as Wand Radar perk
 }
 
 FRAMES = {

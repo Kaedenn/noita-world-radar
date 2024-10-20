@@ -88,7 +88,7 @@ function Radar:configure(values)
     end
 end
 
-function Radar:draw_for_pos(ent_x, ent_y, kind)
+function Radar:draw_for_pos(ent_x, ent_y, kind, config)
     if not RADAR_SPRITE_MAP[kind] then
         print_error(("draw_for({%0.2f, %0.2f}, %d): invalid kind"):format(ent_x, ent_y, kind))
         return
@@ -103,7 +103,13 @@ function Radar:draw_for_pos(ent_x, ent_y, kind)
     local distance = get_magnitude(dx, dy)
 
     local indicator_distance = self:get("indicator_distance")
+    if config and config.indicator_distance then
+        indicator_distance = config.indicator_distance
+    end
     local range = self:get("range") -- range_near
+    if config and config.range then
+        range = config.range
+    end
     local range_strong = range * self.scales.scale_strong
     local range_medium = range * self.scales.scale_medium
     local range_faint = range * self.scales.scale_faint

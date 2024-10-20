@@ -144,7 +144,7 @@ mod_settings = {
                 id = "pos_relative",
                 ui_name = "Relative Positions",
                 ui_description = "Should coordinates be relative instead of absolute?",
-                value_default = false,
+                value_default = true,
                 scope = MOD_SETTING_SCOPE_RUNTIME,
             },
             --[[

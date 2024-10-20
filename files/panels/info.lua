@@ -41,10 +41,12 @@ dofile_once("mods/world_radar/files/utility/spell.lua")
 dofile_once("mods/world_radar/files/utility/treasure_chest.lua")
 dofile_once("mods/world_radar/files/utility/orbs.lua")
 dofile_once("mods/world_radar/files/utility/eval.lua")
+dofile_once("mods/world_Radar/files/utility/draw.lua")
 dofile_once("mods/world_radar/files/radar.lua")
 dofile_once("mods/world_radar/files/lib/utility.lua")
 
 smallfolk = dofile_once("mods/world_radar/files/lib/smallfolk.lua")
+EZWand = dofile_once("mods/world_radar/files/lib/EZWand.lua")
 
 NOWRAP = {wrap=0}           -- Suppress wrapping on hover popups
 
@@ -125,6 +127,7 @@ InfoPanel = {
     env = {
         -- list_biomes = true
         -- find_items = true
+        -- find_wands = true
         -- find_enemies = true
         -- find_spells = true
         -- onscreen = true
@@ -161,14 +164,15 @@ InfoPanel = {
     host = nil,
     funcs = {},
 
-    -- Types of information to show: name, varname, default
+    -- Types of information to show: name, varname, default, hover
     modes = {
-        {"Biomes", "list_biomes", true},
-        {"Items", "find_items", true},
-        {"Enemies", "find_enemies", true},
-        {"Spells", "find_spells", true},
-        {"On-screen", "onscreen", true},
-        {"Radar", "radar", true},
+        {"Biomes", "list_biomes", true, "List biome modifiers"},
+        {"Items", "find_items", true, "List nearby items"},
+        --{"Wands", "find_wands", true, "List nearby wands"},
+        {"Enemies", "find_enemies", true, "List nearby enemies"},
+        {"Spells", "find_spells", true, "List nearby spells"},
+        {"On-screen", "onscreen", true, "Draw on-screen text when closed"},
+        {"Radar", "radar", true, "Draw radar icons pointing at found things"},
     },
 }
 
@@ -401,12 +405,12 @@ function InfoPanel:_get_nearby(taglist, filters)
     return self:_filter_entries(get_with_tags(taglist, filters or {}, simplify))
 end
 
---[[ Get all nearby non-held items (FIXME: Won't work for modded entries without item_pickup tag) ]]
+--[[ Get all nearby non-held items ]]
 function InfoPanel:_get_nearby_items()
     return self:_get_nearby({"item_pickup"})
 end
 
---[[ Get all nearby enemies (FIXME: Won't work for modded entries without enemy tag) ]]
+--[[ Get all nearby enemies ]]
 function InfoPanel:_get_nearby_enemies()
     return self:_get_nearby({"enemy"})--, "mortal", "hittable"})
 end
@@ -719,7 +723,9 @@ function InfoPanel:_draw_orb_radar()
 
     for idx = 1, math.min(display, #orb_list) do
         local orb_x, orb_y = unpack(orb_list[idx]:pos())
-        Radar:draw_for_pos(orb_x, orb_y, RADAR_ORB)
+        Radar:draw_for_pos(orb_x, orb_y, RADAR_ORB, {
+            range = BiomeMapGetSize() * BIOME_SIZE / 8
+        })
     end
 end
 
@@ -864,7 +870,6 @@ function InfoPanel:_draw_onscreen_gui()
             {table.concat(contents, ", "), color=ccyan},
             " detected nearby!!",
             images=images,
-            -- TODO: draw container and material icons
         })
         draw_radar(entry.entity, RADAR_KIND_MATERIAL)
     end
@@ -1100,8 +1105,9 @@ function InfoPanel:_draw_checkboxes(imgui)
     for idx, bpair in ipairs(self.modes) do
         if idx > 1 then imgui.SameLine() end
         imgui.SetNextItemWidth(100)
-        local name, varname, default = unpack(bpair)
+        local name, varname, default, hover = unpack(bpair)
         local ret, value = imgui.Checkbox(name, self.env[varname])
+        self:_draw_hover_tooltip(imgui, hover, nil)
         if ret then
             self.env[varname] = value
             self.host:set_var(self.id, varname, value and "1" or "0")
@@ -1137,6 +1143,46 @@ function InfoPanel:_draw_hover_tooltip(imgui, content, config)
     end
 end
 
+--[[ Create a function that draws the hover tooltip for a wand entity ]]
+function InfoPanel:_make_wand_hover_func(entid, name)
+    local function format_frame_count(label, num_frames)
+        local time_fmt = "%0.2f"
+        if num_frames % 60 == 0 then
+            time_fmt = "%d.0 s"
+        end
+        local time_str = time_fmt:format(num_frames / 60)
+        return ("%s %s (%d frames)"):format(label, time_str, num_frames)
+    end
+    local this = self
+    return function(imgui, self_)
+        local entkey = entity_get_lookup_key(entid)
+        local wand_info = this:_get_item_by_name(entkey)
+        local wand_icon = wand_get_icon(entid) or wand_info.icon or FALLBACK
+        local wand = EZWand(entid)
+        if wand_info.id then
+            imgui.Text(("%s [%s]"):format(wand_info.name, wand_info.id))
+        else
+            imgui.Text(("%s (unknown wand)"):format(name))
+        end
+        imgui.Text(("Path: %s"):format(EntityGetFilename(entid)))
+        imgui.Text(("Shuffle: %s"):format(wand.shuffle and "Yes" or "No"))
+        imgui.Text(("Capacity: %d"):format(wand.capacity))
+        imgui.Text(("Spells per Cast: %d"):format(wand.spellsPerCast))
+        imgui.Text(format_frame_count("Cast Delay:", wand.castDelay))
+        imgui.Text(format_frame_count("Recharge Time:", wand.rechargeTime))
+        imgui.Text(("Mana: %d"):format(wand.mana))
+        imgui.Text(("Spread: %s degrees"):format(wand.spread))
+        imgui.Text(("Speed: %0.3fx"):format(wand.speedMultiplier))
+
+        --[[ This draws below the GUI
+        local screen_w, screen_h = imgui.GetMainViewportWorkSize()
+        local cursor_x, cursor_y = imgui.GetCursorPos()
+        local ui_x = cursor_x / screen_w * 100
+        local ui_y = cursor_y / screen_h * 100
+        wand:RenderTooltip(ui_x, ui_y, this.host.gui, 200)]]
+    end
+end
+
 --[[ Create a function that draws the hover tooltip for a spell ]]
 function InfoPanel:_make_spell_tooltip_func(entry)
     return function(imgui, self_)
@@ -1144,9 +1190,7 @@ function InfoPanel:_make_spell_tooltip_func(entry)
         local data = spell_get_data(entry.id)
         imgui.Text(entry.id)
         if not stats_check_spell(entry.id) then
-            imgui.PushStyleColor(imgui.Col.Text, 1, 0, 0.84)
-            imgui.Text("New!")
-            imgui.PopStyleColor()
+            draw_spell_new(imgui)
         end
         imgui.Text(("Type: %s [%d]"):format(action_lookup(data.type), data.type))
         local price_text = data.price and tostring(data.price) or "<unknown>"
@@ -1301,8 +1345,8 @@ function InfoPanel:_draw_spell_dropdown(imgui)
     -- TODO: Add "show only discovered spells" input
 
     if self.env.spell_text ~= "" then
-        local match_upper = self.env.spell_text:gsub("[^a-zA-Z0-9_]", ""):upper()
-        local match_lower = self.env.spell_text:gsub("[^a-zA-Z0-9_]", ""):lower()
+        local match_text = self.env.spell_text:gsub("[^a-zA-Z0-9_]", "")
+        local match_upper, match_lower = match_text:upper(), match_text:lower()
         for _, spell_entry in ipairs(get_spell_list()) do
             local entry = {
                 id = spell_entry.id,
@@ -1347,9 +1391,7 @@ function InfoPanel:_draw_spell_dropdown(imgui)
                 imgui.Text(("%s (%s)"):format(locname, entry.id))
                 if not stats_check_spell(entry.id) then
                     imgui.SameLine()
-                    imgui.PushStyleColor(imgui.Col.Text, 1, 0, 0.84)
-                    imgui.Text("New!")
-                    imgui.PopStyleColor()
+                    draw_spell_new(imgui)
                 end
                 self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
             end
@@ -1402,9 +1444,7 @@ function InfoPanel:_draw_spell_list(imgui)
         imgui.Text(self.config.simple_names and label or text)
         if not stats_check_spell(entry.id) then
             imgui.SameLine()
-            imgui.PushStyleColor(imgui.Col.Text, 1, 0, 0.84)
-            imgui.Text("New!")
-            imgui.PopStyleColor()
+            draw_spell_new(imgui)
         end
         self:_draw_hover_tooltip(imgui, hover_func, NOWRAP)
     end
@@ -1426,6 +1466,7 @@ function InfoPanel:_draw_material_dropdown(imgui)
         end,
         hover_config = {width=500},
     })
+
     -- {name, checkbox_varname, table_name}
     local kinds = {
         {"Liquids", "material_liquid", "liquids"},
@@ -2347,6 +2388,13 @@ function InfoPanel:init(environ, host, config)
         output = {},
     }
 
+    self.env.list_biomes = false
+    self.env.find_items = true
+    self.env.find_wands = false
+    self.env.find_enemies = true
+    self.env.onscreen = true
+    self.env.radar = true
+
     for _, bpair in ipairs(self.modes) do
         local mname, varname, default = unpack(bpair)
         if self.env[varname] == nil then
@@ -3036,6 +3084,23 @@ function InfoPanel:draw(imgui)
                     self.host:d(line)
                 end
             end
+        end
+    end
+
+    if self.env.find_wands then
+        self.host:p({separator_text="Wands"})
+        for _, entry in ipairs(self:_get_nearby({"wand"})) do
+            local entid, name = unpack(entry)
+            local entkey = entity_get_lookup_key(entid)
+            local wand_info = self:_get_item_by_name(entkey)
+            local wand_icon = wand_get_icon(entid) or wand_info.icon
+            local hover_fn = self:_make_wand_hover_func(entid, name)
+            self.host:p({
+                image = wand_icon,
+                hover = hover_fn,
+                color = "white",
+                wand_info.name,
+            })
         end
     end
 

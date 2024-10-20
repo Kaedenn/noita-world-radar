@@ -176,6 +176,7 @@ wand_props = {
     default = 1,
   },
 }
+
 -- Throws an error if the value doesn't have the correct format or the property doesn't exist
 local function validate_property(name, value)
   if wand_props[name] == nil then
@@ -198,7 +199,6 @@ end
   calls error() if values contains invalid properties
   fills in missing properties with default values
 ]]
-
 function validate_wand_properties(values)
   if type(values) ~= "table" then
     error("Arg 'values': table expected.", 2)
@@ -214,7 +214,7 @@ function validate_wand_properties(values)
   return values
 end
 
- function table.contains(table, element)
+function table.contains(table, element)
   for _, value in pairs(table) do
     if value == element then
       return true
@@ -333,7 +333,6 @@ local function deserialize(str)
     return deserialize_v2(str)
   end
 end
-
 
 local spell_type_bgs = {
 	[ACTION_TYPE_PROJECTILE] = "data/ui_gfx/inventory/item_bg_projectile.png",
@@ -761,6 +760,7 @@ function wand:_SetProperty(key, value)
   end
   target_setters[variable_mappings[key].target](mapped_key, value)
 end
+
 -- Retrieves the actual property from the component or object
 function wand:_GetProperty(key)
   if not variable_mappings[key] then
@@ -812,6 +812,7 @@ function wand:GetProperties(keys)
   return result
 end
 -- For making the interface nicer, this allows us to use this one function here for
+
 function wand:_AddSpells(spells, attach)
   -- Check if capacity is sufficient
   local count = 0
@@ -876,6 +877,7 @@ function extract_spells_from_vararg(...)
   end
   return spells
 end
+
 -- Input can be a table of action_ids, or multiple arguments
 -- e.g.:
 -- AddSpells("BLACK_HOLE")
@@ -887,15 +889,18 @@ function wand:AddSpells(...)
   local spells = extract_spells_from_vararg(...)
   self:_AddSpells(spells, false)
 end
+
 -- Same as AddSpells but permanently attach the spells
 function wand:AttachSpells(...)
   local spells = extract_spells_from_vararg(...)
   self:_AddSpells(spells, true)
 end
+
 -- Returns the amount of slots on a wand that are not occupied by a spell
 function wand:GetFreeSlotsCount()
   return self.capacity - self:GetSpellsCount()
 end
+
 -- Returns: spells_count, always_cast_spells_count
 function wand:GetSpellsCount()
 	local children = EntityGetAllChildren(self.entity_id)
@@ -913,6 +918,7 @@ function wand:GetSpellsCount()
 
 	return #children - always_cast_spells_count, always_cast_spells_count
 end
+
 -- Returns two values:
 -- 1: table of spells with each entry having the format { action_id = "BLACK_HOLE", inventory_x = 1, entity_id = <action_entity_id> }
 -- 2: table of attached spells with the same format
@@ -1000,6 +1006,7 @@ function wand:_RemoveSpells(spells_to_remove, detach)
   end
   refresh_wand_if_in_inventory(self.entity_id)
 end
+
 -- action_ids = {"BLACK_HOLE", "GRENADE"} remove all spells of those types
 -- If action_ids is empty, remove all spells
 -- If entry is in the form of {"BLACK_HOLE", 2}, only remove 2 instances of black hole
@@ -1092,11 +1099,9 @@ function wand:Clone()
   return new_wand
 end
 
---[[
-  These are pulled from data/scripts/gun/procedural/gun_procedural.lua
-  because dofiling that file overwrites the init_total_prob function,
-  which ruins things in biome scripts
-]]
+-- These are pulled from data/scripts/gun/procedural/gun_procedural.lua
+-- because dofiling that file overwrites the init_total_prob function,
+-- which ruins things in biome scripts
 function WandDiff( gun, wand )
 	local score = 0
 	score = score + ( math.abs( gun.fire_rate_wait - wand.fire_rate_wait ) * 2 )
@@ -1133,7 +1138,6 @@ function GetWand( gun )
 	end
 	return best_wand
 end
---[[ /data/scripts/gun/procedural/gun_procedural.lua ]]
 
 -- Applies an appropriate Sprite using the games own algorithm
 function wand:UpdateSprite()
@@ -1643,3 +1647,5 @@ return setmetatable({}, {
     })[key]
   end
 })
+
+-- vim: set ts=2 sts=2 sw=2 nolist:

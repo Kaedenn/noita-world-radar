@@ -1,3 +1,4 @@
+--[[ World Radar configuration constants ]]
 
 MOD_ID = "world_radar"
 
@@ -28,14 +29,17 @@ CONF = {
     ORB_DISPLAY = "orb_display",
 }
 
+-- Get the current value of a setting
 function conf_get(key)
     return ModSettingGet(MOD_ID .. "." .. key)
 end
 
+-- Set the next value of a setting
 function conf_set(key, value)
     return ModSettingSetNextValue(MOD_ID .. "." .. key, value, false)
 end
 
+-- Flip the value of a setting between true and false
 function conf_toggle(key)
     conf_set(key, not conf_get(key))
 end

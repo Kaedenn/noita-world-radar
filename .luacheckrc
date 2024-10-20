@@ -1,4 +1,8 @@
 
+exclude_files = {
+  "files/lib/EZWand.lua",
+}
+
 files["settings.lua"] = {
   read_globals = {
     -- "data/scripts/lib/mod_settings.lua"
@@ -121,11 +125,14 @@ files["files/panels/info.lua"] = {
     "format_rewards",
     "REWARD",
     -- "mods/world_radar/files/utility/orbs.lua"
+    "BIOME_SIZE",
     "Orbs",
     "world_get_name",
     "make_distance_sorter",
     -- "mods/world_radar/files/utility/eval.lua"
     "Eval",
+    -- "mods/world_radar/files/utility/draw.lua"
+    "draw_spell_new",
     -- "mods/world_radar/files/radar.lua"
     "Radar",
     "RADAR_KIND_SPELL",

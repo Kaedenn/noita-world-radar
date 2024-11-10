@@ -216,6 +216,11 @@ function InfoPanel:_get_material_tables()
     -- See files/utility/material.lua generate_material_tables
     if not self.env.material_cache or #self.env.material_cache == 0 then
         self.env.material_cache = generate_material_tables()
+        setmetatable(self.env.material_cache, {
+            __index = function(self, key)
+                return rawget(self, key) -- TODO
+            end
+        })
     end
     return self.env.material_cache
 end
@@ -277,7 +282,7 @@ function InfoPanel:_get_spell_by_name(sname)
     return {}
 end
 
---[[ Obtain the material ID, name, etc. for the given name/filename ]]
+--[[ Obtain the material ID, name, etc. for the given name/ID ]]
 function InfoPanel:_get_material_by_name(mname)
     --[[{
     --  kind = "sand",
@@ -288,10 +293,13 @@ function InfoPanel:_get_material_by_name(mname)
     --  icon = "data/generated/material_icons/gold.png",
     --  tags = {"[alchemy]", "[corrodible]", "[earth]", "[gold]", ...}
     --}]]
+    if type(mname) == "number" then
+        mname = CellFactory_GetName(mname)
+    end
     if not mname or mname == "" then return {} end
     if self.env.material_cache and #self.env.material_cache > 0 then
         for _, entry in ipairs(self.env.material_cache) do
-            if table_has_entry({entry.name, entry.path}, mname) then
+            if table_has_entry({entry.name, entry.uiname}, mname) then
                 return entry
             end
         end
@@ -3043,7 +3051,6 @@ function InfoPanel:draw(imgui)
                         color = self.host.colors.debug
                     })
                 end
-                local is_container = EntityHasTag(entity, "potion") or EntityHasTag(entity, "powder_stash")
                 if entity_is_chest(entity) then
                     line[1].button = {
                         text = "View",
@@ -3062,7 +3069,7 @@ function InfoPanel:draw(imgui)
                     }
                     self.host:p(line)
                 else
-                    if is_container then
+                    if EntityHasTag(entity, "potion") or EntityHasTag(entity, "powder_stash") then
                         local capacity = container_get_capacity(entity)
                         for matname, amount in pairs(container_get_contents(entity)) do
                             local percent = amount / capacity * 100

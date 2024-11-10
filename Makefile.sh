@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -u
 
 # "Makefile-like" script for deploying this mod
 
@@ -11,14 +11,15 @@ MOD_NAME="$(basename "$(readlink -f "$SELF")")"
 
 print_usage() {
   cat <<EOF >&2
-usage: $0 [-h] [-v|-V] [-n] [-b DIR] [-C] [-F] [-N DIR] [-a ARG] [-i PATH]
-          [-x PAT] [ACTION]
+usage: $0 [OPTIONS] [ACTION]
 
 actions:
+    check   validate all Lua files using luacheck
     diff    compare local and deployed versions of this mod (default)
     diffw   compare local and workshop versions of this mod
     diffd   compare deployed and workshop versions of this mod
     cp      copy this mod to the Noita mods directory
+    cpnow   copy this mod without comparing or checking anything
 
 options:
     -h      print this message and exit
@@ -26,6 +27,7 @@ options:
     -V      enable verbose diagnostics and set -x
     -n      dry run; don't actually do anything
     -l PATH path to luacheck.sh script
+    -A      abort if luacheck reports an error on a file
     -L ARG  pass ARG to luacheck command line
     -b DIR  backup destination into DIR/ before overwriting
     -C      disable color formatting
@@ -41,13 +43,20 @@ environment variables:
 EOF
 }
 
+DEBUG="${DEBUG:-}"
+BACKUP=
+DRY_RUN=
+LUACHECK="${LUACHECK:-}"
+LUACHECK_ABORT=
 declare -a LUACHECK_ARGS=()
+NOCOLOR=
+FORCE_COPY=
 NOITA_PATH="${NOITA:-}"
 declare -a DIFF_ARGS=()
 declare -a COPY_EXTRA=()
 declare -a EXCLUDE_EXTRA=('*.sh' .luacheckrc)
 
-while getopts "hvVnl:L:b:CFN:a:i:x:" arg; do
+while getopts "hvVnl:AL:b:CFN:a:i:x:" arg; do
   case "$arg" in
     h) print_usage; exit 0;;
     v) DEBUG=1;;
@@ -55,6 +64,7 @@ while getopts "hvVnl:L:b:CFN:a:i:x:" arg; do
     b) BACKUP="$OPTARG";;
     n) DRY_RUN=1;;
     l) LUACHECK="$OPTARG";;
+    A) LUACHECK_ABORT=1;;
     L) LUACHECK_ARGS+=("$OPTARG");;
     C) NOCOLOR=1;;
     F) FORCE_COPY=1;;
@@ -67,7 +77,7 @@ done
 shift $((OPTIND - 1))
 
 # Allow for ../luacheck.sh as a default
-if [[ -z "${LUACHECK:-}" ]]; then
+if [[ -z "$LUACHECK" ]]; then
   if [[ -x "$SELF/../luacheck.sh" ]]; then
     LUACHECK="$SELF/../luacheck.sh"
   fi
@@ -80,7 +90,7 @@ color() { # code message...
   local IFS=';'
   local code=${*:1:$ncodes}
   local msg="${@:$#}"
-  if [[ -z "${NOCOLOR:-}" ]]; then
+  if [[ -z "$NOCOLOR" ]]; then
     echo -e "\033[${code}m${msg}\033[0m"
   else
     echo "${msg}"
@@ -94,10 +104,10 @@ diag() { # prefix message...
 error() { diag "$(color 1 91 ERROR)" "$@"; }
 info() { diag "$(color 1 94 INFO)" "$@"; }
 warn() { diag "$(color 1 93 WARNING)" "$@"; }
-debug() { if [[ -n "${DEBUG:-}" ]]; then diag "$(color 1 92 DEBUG)" "$@"; fi; }
+debug() { if [[ -n "$DEBUG" ]]; then diag "$(color 1 92 DEBUG)" "$@"; fi; }
 
 dry() { # command...
-  if [[ -z "${DRY_RUN:-}" ]]; then
+  if [[ -z "$DRY_RUN" ]]; then
     $@; return $?
   fi
   info "$(color 93 DRY): $@"
@@ -145,7 +155,7 @@ compare_mods() { # local remote
     diff_args+=(-x "$pat")
   done
 
-  if [[ -z "${DEBUG:-}" ]]; then
+  if [[ -z "$DEBUG" ]]; then
     diff_args+=("-q")
   else
     declare -p diff_args
@@ -187,7 +197,7 @@ is_noita_dir() { # path
 
 # Locate the Noita game directory (the directory containing noita.exe)
 find_noita() {
-  local noita_path="${NOITA_PATH:-}"
+  local noita_path="$NOITA_PATH"
   if [[ -z "$noita_path" ]]; then
     local steam_root="$(find_steam)"
     if [[ $? -ne 0 ]]; then
@@ -223,6 +233,7 @@ get_workshop_base() {
   readlink -f "$noita_dir/../../workshop/content/881100"
 }
 
+# Determine the downloaded workshop directory for the given mod path
 get_workshop_path() { # mod-path
   if [[ ! -f "$1/workshop_id.txt" ]]; then
     error "$1 missing workshop_id.txt"
@@ -252,7 +263,7 @@ archive_path() { # archive-name path
   fi
 
   local -a tar_args=()
-  if [[ -n "${DEBUG:-}" ]]; then
+  if [[ -n "$DEBUG" ]]; then
     tar_args+=(cvfz)
   else
     tar_args+=(cfz)
@@ -304,9 +315,6 @@ deploy_one() { # entry dest
   local dest="$2"
   local dpath="$(dirname "$entry")"
   info "Replicating $entry to $dest/$entry"
-  if [[ "$entry" =~ \.lua$ ]]; then
-    do_luacheck "$entry"
-  fi
   if [[ -n "$dpath" ]] && [[ "$dpath" != "." ]]; then
     if [[ ! -d "$dest/$dpath" ]]; then
       dry checked mkdir -p "$dest/$dpath"
@@ -325,7 +333,7 @@ deploy_one() { # entry dest
 deploy() { # dest
   local dest="$1"
   git ls-files -c | while read entry; do
-    deploy_check_skip $entry && continue
+    deploy_check_skip "$entry" && continue
     deploy_one "$entry" "$dest"
   done
 
@@ -336,15 +344,44 @@ deploy() { # dest
 
 # Invoke luacheck on the file
 do_luacheck() { # file...
-  if [[ -z "${LUACHECK:-}" ]]; then
+  if [[ -z "$LUACHECK" ]]; then
     info "luacheck not available; skipping check"
-  elif [[ -x "${LUACHECK:-}" ]]; then
-    "$LUACHECK" "${LUACHECK_ARGS[@]}" "$@"
+  elif [[ -x "$LUACHECK" ]]; then
+    if [[ -n "$LUACHECK_ABORT" ]]; then
+      checked "$LUACHECK" "${LUACHECK_ARGS[@]}" "$@"
+    else
+      "$LUACHECK" "${LUACHECK_ARGS[@]}" "$@"
+    fi
     return $?
   else
     warn "luacheck '$LUACHECK' not executable"
   fi
   return 0
+}
+
+# Check all of the source files for errors
+luacheck_all() {
+  local rc_status=0
+  for entry in $(git ls-files -c); do
+    deploy_check_skip "$entry" && continue
+    if [[ "$entry" =~ \.lua$ ]]; then
+      info "Checking $entry for errors..."
+      if ! do_luacheck "$entry"; then
+        rc_status=1
+      fi
+    fi
+  done
+
+  for entry in "${COPY_EXTRA[@]}"; do
+    if [[ "$entry" =~ \.lua$ ]]; then
+      info "Checking $entry for errors..."
+      if ! do_luacheck "$entry"; then
+        rc_status=1
+      fi
+    fi
+  done
+
+  return $rc_status
 }
 
 NOITA="$(find_noita)"
@@ -353,6 +390,11 @@ if [[ $? -ne 0 ]]; then
   exit 1
 fi
 
+WANT_DIFF=
+WANT_CHECK=
+WANT_BACKUP=
+WANT_COPY=
+
 DEST_DIR="$NOITA/mods/$MOD_NAME"
 
 DIFF_LEFT="local"
@@ -360,15 +402,26 @@ DIFF_RIGHT="deployed"
 DIFF_FROM="$SELF"
 DIFF_TO="$DEST_DIR"
 case "$ACTION" in
-  cp) ;;
-  diff) ;;
+  cp)
+    WANT_DIFF=1;
+    WANT_CHECK=1;
+    WANT_BACKUP=1;
+    WANT_COPY=1;;
+  cpnow)
+    WANT_COPY=1;;
+  check)
+    WANT_CHECK=1;;
+  diff)
+    WANT_DIFF=1;;
   diffw)
+    WANT_DIFF=1;
     DIFF_ARGS+=(-x "*.py");
     DIFF_LEFT="workshop";
     DIFF_RIGHT="local";
     DIFF_FROM="$(get_workshop_path "$SELF")";
     DIFF_TO="$SELF";;
   diffd)
+    WANT_DIFF=1;
     DIFF_ARGS+=(-x "*.py");
     DIFF_LEFT="workshop";
     DIFF_RIGHT="deployed";
@@ -380,23 +433,38 @@ case "$ACTION" in
     exit 1;;
 esac
 
-debug "Comparing $DIFF_LEFT (as $DIFF_FROM) with $DIFF_RIGHT (as $DIFF_TO)"
+EXIT_STATUS=0
 
-compare_mods "$DIFF_FROM" "$DIFF_TO"
-DIFF_STATUS=$?
+if [[ -n "$WANT_DIFF" ]]; then
+  debug "Comparing $DIFF_LEFT (as $DIFF_FROM) with $DIFF_RIGHT (as $DIFF_TO)"
 
-if [[ $DIFF_STATUS -ne 0 ]]; then
-  info "Detected differences between $DIFF_LEFT and $DIFF_RIGHT directories"
-elif [[ -n "${FORCE_COPY:-}" ]] && [[ "$ACTION" != "cp" ]]; then
-  info "No differences detected, but copying anyway"
-else
-  info "No differences detected"
-  exit 0
+  compare_mods "$DIFF_FROM" "$DIFF_TO"
+  DIFF_STATUS=$?
+
+  if [[ $DIFF_STATUS -ne 0 ]]; then
+    info "Detected differences between $DIFF_LEFT and $DIFF_RIGHT directories"
+  elif [[ -n "$FORCE_COPY" ]] && [[ -n "$WANT_COPY" ]]; then
+    info "No differences detected, but copying anyway"
+  else
+    info "No differences detected"
+    exit 0
+  fi
 fi
 
-if [[ "$ACTION" == "cp" ]]; then
+if [[ -n "$WANT_CHECK" ]]; then
+  if luacheck_all; then
+    info "All files validated with no issues detected"
+  else
+    error "One or more files failed validation"
+    if [[ "$ACTION" == "check" ]]; then
+      EXIT_STATUS=1
+    fi
+  fi
+fi
+
+if [[ -n "$WANT_BACKUP" ]]; then
   # Should we create a backup of the deployed directory?
-  if [[ -n "${BACKUP:-}" ]]; then
+  if [[ -n "$BACKUP" ]]; then
     BKFILE="$BACKUP/$MOD_NAME-$(date +%Y%m%d-%H%M%S).tar.gz"
     checked archive_path "$BKFILE" "$DEST_DIR"
     info "Backed-up $DEST_DIR to $BKFILE"
@@ -405,7 +473,9 @@ if [[ "$ACTION" == "cp" ]]; then
       checked rm "$BKFILE"
     fi
   fi
+fi
 
+if [[ -n "$WANT_COPY" ]]; then
   # Deploy this mod to the destination directory
   info "Copying . to $DEST_DIR"
   if [[ -d "$DEST_DIR" ]]; then
@@ -420,5 +490,7 @@ if [[ "$ACTION" == "cp" ]]; then
 else
   info "Execute '$0 [ARGS...] cp' to deploy $MOD_NAME"
 fi
+
+exit $EXIT_STATUS
 
 # vim: set ts=2 sts=2 sw=2:

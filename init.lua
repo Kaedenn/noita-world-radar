@@ -18,6 +18,7 @@ dofile_once("mods/world_radar/files/lib/profiler.lua")
 MaterialTables = {}
 KPanelLib = dofile("mods/world_radar/files/panel.lua")
 KPanel = nil
+---@class ImGui
 imgui = nil
 
 function do_print_error(...)

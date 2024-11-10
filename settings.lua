@@ -9,7 +9,6 @@ dofile_once("data/scripts/lib/mod_settings.lua")
 MOD_ID = "world_radar"
 
 function wr_range_manual(mod_id, gui, in_main_menu, im_id, setting)
-    -- luacheck: globals mod_setting_text
     if ModSettingGetNextValue(MOD_ID .. ".radar_range") == "manual" then
         mod_setting_text(mod_id, gui, in_main_menu, im_id, setting)
     end
@@ -233,7 +232,6 @@ end
 --    - at the end of an update when mod settings have been changed via
 --      ModSettingsSetNextValue() and the game is unpaused (MOD_SETTINGS_SCOPE_RUNTIME)
 function ModSettingsUpdate(init_scope)
-    -- luacheck: globals mod_settings_get_version mod_settings_update
     local old_version = mod_settings_get_version(MOD_ID)
     mod_settings_update(MOD_ID, mod_settings, init_scope)
 end
@@ -249,7 +247,6 @@ end
 -- but we don't guarantee that will be the case in the future.
 -- This function is called every frame when in the settings menu.
 function ModSettingsGuiCount()
-    -- luacheck: globals mod_settings_gui_count
     return mod_settings_gui_count(MOD_ID, mod_settings)
 end
 
@@ -257,7 +254,6 @@ end
 -- settings wont be visible in the mod settings menu if this function isn't
 -- defined correctly.
 function ModSettingsGui(gui, in_main_menu)
-    -- luacheck: globals mod_settings_gui
     mod_settings_gui(MOD_ID, mod_settings, gui, in_main_menu)
 end
 
